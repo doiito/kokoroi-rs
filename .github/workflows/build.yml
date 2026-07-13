@@ -25,7 +25,6 @@ concurrency:
 
 env:
   ORT_VERSION: "1.23.2"
-  MUSL_TC_DIR: ${{ github.workspace }}/.musl-tc
   ORT_SRC_DIR: ${{ github.workspace }}/.ort-src
   ORT_INSTALL_DIR: ${{ github.workspace }}/.ort-install
 
@@ -43,12 +42,10 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             toolchain_name: x86_64-linux-musl
-            toolchain_url: https://musl.cc/x86_64-linux-musl-cross.tgz
             kind: linux-musl
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             toolchain_name: aarch64-linux-musl
-            toolchain_url: https://musl.cc/aarch64-linux-musl-cross.tgz
             kind: linux-musl
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -66,25 +63,16 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            cmake ninja-build protobuf-compiler wget xz-utils curl
+            cmake ninja-build protobuf-compiler xz-utils
 
-      # ----- musl-cross toolchain ----------------------------------------
-      - name: Cache musl-cross toolchain (Linux)
+      # ----- musl-cross toolchain (apt, more reliable than musl.cc) -------
+      - name: Install musl-cross toolchain (Linux)
         if: runner.os == 'Linux'
-        id: cache-tc
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.MUSL_TC_DIR }}
-          key: musl-tc-${{ matrix.target }}
-
-      - name: Download musl-cross toolchain (Linux)
-        if: runner.os == 'Linux' && steps.cache-tc.outputs.cache-hit != 'true'
         run: |
-          mkdir -p "$MUSL_TC_DIR"
-          echo "Downloading ${{ matrix.toolchain_url }} …"
-          curl -fsSL --retry 5 --retry-delay 10 "${{ matrix.toolchain_url }}" -o /tmp/tc.tgz
-          tar -xzf /tmp/tc.tgz -C "$MUSL_TC_DIR/"
-          ls -la "$MUSL_TC_DIR/"
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc-${{ matrix.toolchain_name }} g++-${{ matrix.toolchain_name }}
+          echo "Toolchain installed:"
+          ${{ matrix.toolchain_name }}-gcc --version
 
       # ----- ONNX Runtime source (Linux, build from source) -------------
       - name: Cache ONNX Runtime source (Linux)
@@ -115,14 +103,14 @@ jobs:
       - name: Build ONNX Runtime from source (Linux)
         if: runner.os == 'Linux' && steps.cache-ort-build.outputs.cache-hit != 'true'
         run: |
-          TC_DIR=$(find "$MUSL_TC_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)
-          if [ -z "$TC_DIR" ]; then
-            echo "FATAL: no toolchain directory found under $MUSL_TC_DIR"
-            ls -la "$MUSL_TC_DIR/"
+          TC_GCC=$(command -v ${{ matrix.toolchain_name }}-gcc)
+          if [ -z "$TC_GCC" ]; then
+            echo "FATAL: ${{ matrix.toolchain_name }}-gcc not found on PATH"
             exit 1
           fi
-          echo "Toolchain: $TC_DIR"
-          echo "  compiler: $TC_DIR/bin/${{ matrix.toolchain_name }}-gcc"
+          TC_DIR="$(dirname "$(dirname "$TC_GCC")")"
+          echo "Toolchain GCC: $TC_GCC"
+          echo "Toolchain dir: $TC_DIR"
           mkdir -p "$ORT_INSTALL_DIR/${{ matrix.target }}"
           bash scripts/build_ort_musl.sh \
             "${{ matrix.target }}" \
@@ -170,12 +158,11 @@ jobs:
       - name: Set up build environment (Linux musl)
         if: runner.os == 'Linux'
         run: |
-          TC_DIR=$(find "$MUSL_TC_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)
+          TC_GCC=$(command -v ${{ matrix.toolchain_name }}-gcc)
           TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]-' '[:upper:]_')
-          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${TC_DIR}/bin/${{ matrix.toolchain_name }}-gcc" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${TC_GCC}" >> "$GITHUB_ENV"
           echo "ORT_LIB_LOCATION=${ORT_INSTALL_DIR}/${{ matrix.target }}" >> "$GITHUB_ENV"
           echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
-          echo "${TC_DIR}/bin" >> "$GITHUB_PATH"
 
       - name: Set up build environment (Windows MSVC)
         if: runner.os == 'Windows'
