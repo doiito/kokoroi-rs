@@ -136,7 +136,7 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -Donnxruntime_BUILD_SHARED_LIB=OFF \
     -Donnxruntime_BUILD_UNIT_TESTS=OFF \
     -Donnxruntime_RUN_ONNX_TESTS=OFF \
-    -Donnxruntime_ENABLE_LTO=ON \
+    -Donnxruntime_ENABLE_LTO=OFF \
     -Donnxruntime_USE_CUDA=OFF \
     -Donnxruntime_USE_DNNL=OFF \
     -Donnxruntime_USE_TENSORRT=OFF \
@@ -157,7 +157,8 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -Donnxruntime_DISABLE_ML_OPS=ON \
     -Donnxruntime_DISABLE_RTTI=ON \
     -Donnxruntime_MINIMAL_BUILD=ON \
-    -Donnxruntime_EXTENDED_MINIMAL_BUILD=ON
+    -Donnxruntime_EXTENDED_MINIMAL_BUILD=ON \
+    -Donnxruntime_ENABLE_STACKTRACE=OFF
 
 echo ""
 echo "--- Building ORT ---"
