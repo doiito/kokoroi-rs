@@ -33,3 +33,5 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.ort-src/
+kokoro-binaries-*/

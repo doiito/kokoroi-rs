@@ -181,6 +181,7 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -Donnxruntime_USE_MPI=OFF \
     -Donnxruntime_USE_OPENMP=OFF \
     -Donnxruntime_DISABLE_ML_OPS=ON \
+    -Donnxruntime_DISABLE_CONTRIB_OPS=ON \
     -Donnxruntime_DISABLE_RTTI=ON \
     -Donnxruntime_MINIMAL_BUILD=ON \
     -Donnxruntime_EXTENDED_MINIMAL_BUILD=ON \
@@ -211,6 +212,14 @@ if [ ${#A_LIBS[@]} -eq 0 ]; then
         exit 1
     fi
 else
+    # Also locate external-dependency archives (e.g. libre2) that cmake
+    # builds in _deps/ but might not appear in the flat list above.
+    EXTRA_DEPS=$(find "$BUILD_DIR/_deps" -name "libre2.a" -type f 2>/dev/null || true)
+    for dep in $EXTRA_DEPS; do
+        echo "Found extra dep: $dep"
+        A_LIBS+=("$dep")
+    done
+
     echo "Found ${#A_LIBS[@]} static libs in build output"
 
     # Create MRI script for combining
