@@ -66,7 +66,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            cmake ninja-build protobuf-compiler wget xz-utils
+            cmake ninja-build protobuf-compiler wget xz-utils curl
 
       # ----- musl-cross toolchain ----------------------------------------
       - name: Cache musl-cross toolchain (Linux)
@@ -82,7 +82,7 @@ jobs:
         run: |
           mkdir -p "$MUSL_TC_DIR"
           echo "Downloading ${{ matrix.toolchain_url }} …"
-          wget -q "${{ matrix.toolchain_url }}" -O /tmp/tc.tgz
+          curl -fsSL --retry 5 --retry-delay 10 "${{ matrix.toolchain_url }}" -o /tmp/tc.tgz
           tar -xzf /tmp/tc.tgz -C "$MUSL_TC_DIR/"
           ls -la "$MUSL_TC_DIR/"
 
@@ -141,10 +141,23 @@ jobs:
           New-Item -ItemType Directory -Force -Path $ortBase
           $zipUrl = "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip"
           Write-Output "Downloading ORT from $zipUrl"
-          Invoke-WebRequest -Uri $zipUrl -OutFile "$ortBase\ort.zip"
+          Invoke-WebRequest -Uri $zipUrl -OutFile "$ortBase\ort.zip" -MaximumRetryCount 5 -RetryIntervalSec 5
+          if (-not (Test-Path "$ortBase\ort.zip") -or (Get-Item "$ortBase\ort.zip").Length -eq 0) {
+            Write-Output "ERROR: ORT zip download failed or empty"
+            exit 1
+          }
+          Write-Output "ORT zip size: $((Get-Item "$ortBase\ort.zip").Length) bytes"
           Expand-Archive -Path "$ortBase\ort.zip" -DestinationPath "$ortBase" -Force
+          # List what was extracted
+          Write-Output "ORT extract contents:"
+          Get-ChildItem -Path $ortBase -Depth 2 | Select-Object Name, Length, Directory | Format-Table
           # Extract dir is versioned, e.g. onnxruntime-win-x64-1.23.2/
-          $extractDir = Get-ChildItem -Path $ortBase -Directory | Select-Object -First 1 | Select-Object -ExpandProperty FullName
+          $extractDir = Get-ChildItem -Path $ortBase -Directory | Where-Object { $_.Name -like "onnxruntime*" } | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $extractDir) {
+            Write-Output "ERROR: no onnxruntime* directory found in $ortBase"
+            Get-ChildItem -Path $ortBase -Directory | Select-Object Name | Format-Table
+            exit 1
+          }
           Write-Output "ORT extracted to $extractDir"
           # Point ORT_LIB_LOCATION to the lib\ subdirectory (contains onnxruntime.lib)
           "ORT_LIB_LOCATION=$extractDir\lib" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -214,7 +227,17 @@ jobs:
       - name: Copy onnxruntime.dll alongside Windows exe
         if: runner.os == 'Windows'
         run: |
-          Copy-Item "$env:ORT_EXTRACT_DIR\bin\onnxruntime.dll" -Destination "target\${{ matrix.target }}\release\" -Force
+          Write-Output "ORT_EXTRACT_DIR = $env:ORT_EXTRACT_DIR"
+          Write-Output "Directory listing of ORT extract root:"
+          Get-ChildItem -Path "$env:ORT_EXTRACT_DIR" -Recurse -Depth 2 | Select-Object Name, Length, Directory | Format-Table
+          # Find onnxruntime.dll anywhere under ORT_EXTRACT_DIR
+          $dllPath = Get-ChildItem -Path "$env:ORT_EXTRACT_DIR" -Filter onnxruntime.dll -Recurse | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dllPath) {
+            Write-Output "ERROR: onnxruntime.dll not found under $env:ORT_EXTRACT_DIR"
+            exit 1
+          }
+          Write-Output "Found onnxruntime.dll at: $dllPath"
+          Copy-Item $dllPath -Destination "target\${{ matrix.target }}\release\" -Force
           Write-Output "onnxruntime.dll copied to release dir"
 
       - name: Verify binaries (Linux)

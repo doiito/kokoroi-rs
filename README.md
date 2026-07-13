@@ -1,6 +1,6 @@
 # Kokoro TTS — 高质量中文语音合成引擎
 
-[![Build](https://github.com/your-org/kokoroi-rs/actions/workflows/build.yml/badge.svg)](https://github.com/your-org/kokoroi-rs/actions/workflows/build.yml)
+[![Build](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml/badge.svg)](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml)
 
 **kokoroi-rs** 是 [Kokoro TTS](https://github.com/kokoro-tts) 的 Rust 实现，专注于高质量的中文语音合成（Text-to-Speech）。基于 Kokoro 模型，使用 ONNX Runtime 进行推理，提供 CLI 工具和 HTTP API 服务两种使用方式。
 
@@ -19,7 +19,7 @@
 
 ### 下载预编译二进制
 
-从 [Releases](https://github.com/your-org/kokoroi-rs/releases) 页面下载对应平台的编译产物：
+从 [Releases](https://github.com/doiito/kokoroi-rs/releases) 页面下载对应平台的编译产物：
 
 | 平台 | 文件 | 说明 |
 |------|------|------|

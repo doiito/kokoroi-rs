@@ -1,6 +1,6 @@
 # Kokoro TTS — High-Quality Text-to-Speech Engine
 
-[![Build](https://github.com/your-org/kokoroi-rs/actions/workflows/build.yml/badge.svg)](https://github.com/your-org/kokoroi-rs/actions/workflows/build.yml)
+[![Build](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml/badge.svg)](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml)
 
 **kokoroi-rs** is a Rust implementation of [Kokoro TTS](https://github.com/kokoro-tts/kokoro), focusing on high-quality Chinese text-to-speech synthesis. Powered by the Kokoro model with ONNX Runtime inference, it offers both a CLI tool and an HTTP API server.
 
@@ -19,7 +19,7 @@
 
 ### Download Prebuilt Binaries
 
-Download the binary for your platform from the [Releases](https://github.com/your-org/kokoroi-rs/releases) page:
+Download the binary for your platform from the [Releases](https://github.com/doiito/kokoroi-rs/releases) page:
 
 | Platform | File | Notes |
 |----------|------|-------|
