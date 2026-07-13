@@ -181,7 +181,8 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -Donnxruntime_USE_MPI=OFF \
     -Donnxruntime_USE_OPENMP=OFF \
     -Donnxruntime_DISABLE_ML_OPS=ON \
-    -Donnxruntime_ENABLE_WERROR=OFF \
+    -Donnxruntime_DISABLE_CONTRIB_OPS=ON \
+    -DCMAKE_CXX_FLAGS="-Wno-error=unused-parameter" \
     -Donnxruntime_DISABLE_RTTI=ON \
     -Donnxruntime_MINIMAL_BUILD=ON \
     -Donnxruntime_EXTENDED_MINIMAL_BUILD=ON \
