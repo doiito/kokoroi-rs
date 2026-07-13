@@ -1,0 +1,35 @@
+# Rust
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build outputs
+dist/
+tmp/
+*.wav
+*.mp3
+*.onnx
+*.bin
+
+# WASM
+static/wasm-pkg/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OpenCode session state
+.omo/
+
+# Code intelligence cache
+.codegraph/
+
+# Environment
+.env
+.env.local

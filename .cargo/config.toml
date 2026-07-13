@@ -1,0 +1,15 @@
+# Linker wrappers for musl static builds.
+#
+# The wrapper scripts resolve the musl-cross gcc from one of:
+#   1. $MUSL_TOOLCHAIN_GCC  — explicit path env var
+#   2. $MUSL_TOOLCHAIN_PATH — toolchain root env var (appends bin/<name>-gcc)
+#   3. PATH                 — fallback
+#   4. Built-in fallback    — hardcoded local Kokoros-main path (dev setup)
+#
+# CI overrides these entirely via CARGO_TARGET_*_LINKER env vars.
+
+[target.x86_64-unknown-linux-musl]
+linker = "scripts/x86_64-musl-linker.sh"
+
+[target.aarch64-unknown-linux-musl]
+linker = "scripts/aarch64-musl-linker.sh"

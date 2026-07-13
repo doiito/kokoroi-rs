@@ -1,0 +1,20 @@
+[package]
+name = "misaki"
+version = "0.3.0"
+edition = "2024"
+license = "MIT"
+description = "A POS-aware Grapheme-to-Phoneme (G2P) engine for Rust, optimized for TTS models like Kokoro."
+
+[features]
+default = []
+
+[dependencies]
+log = "0.4"
+regex = "1.10"
+num2words = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[dev-dependencies]
+env_logger = "0.11"

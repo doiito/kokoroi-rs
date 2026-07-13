@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kokoro TTS Server - SSE Streaming</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh; padding: 20px; color: #fff;
+        }
+        .container {
+            max-width: 900px; margin: 0 auto; background: rgba(255,255,255,0.05);
+            border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            overflow: hidden; backdrop-filter: blur(10px);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 30px; text-align: center;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.1em; opacity: 0.9; }
+        .content { padding: 30px; }
+        .status-bar {
+            padding: 15px; border-radius: 10px; margin-bottom: 20px;
+            text-align: center; font-weight: 500;
+        }
+        .status-bar.loading { background: rgba(255,193,7,0.2); color: #ffc107; border: 1px solid #ffc107; }
+        .status-bar.ready { background: rgba(40,167,69,0.2); color: #28a745; border: 1px solid #28a745; }
+        .status-bar.error { background: rgba(220,53,69,0.2); color: #dc3545; border: 1px solid #dc3545; }
+        .input-section { margin-bottom: 30px; }
+        .input-section label {
+            display: block; font-weight: 600; margin-bottom: 10px; color: #fff;
+        }
+        textarea {
+            width: 100%; height: 150px; padding: 15px;
+            border: 2px solid rgba(255,255,255,0.2); border-radius: 10px;
+            font-size: 16px; resize: vertical; background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        textarea:focus { outline: none; border-color: #667eea; }
+        textarea::placeholder { color: rgba(255,255,255,0.5); }
+        .controls {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px; margin-bottom: 30px;
+        }
+        .control-group { display: flex; flex-direction: column; }
+        .control-group label {
+            font-weight: 600; margin-bottom: 5px; color: rgba(255,255,255,0.8);
+        }
+        select, input[type="number"] {
+            padding: 10px; border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px; font-size: 14px; background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        select option { background: #1a1a2e; color: #fff; }
+        .buttons {
+            display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 30px;
+        }
+        button {
+            flex: 1; min-width: 150px; padding: 15px 30px;
+            font-size: 16px; font-weight: 600; border: none;
+            border-radius: 10px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #synthesizeBtn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        #synthesizeBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        #stopBtn {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+        }
+        .progress-container { margin: 20px 0; }
+        .progress-bar {
+            width: 100%; height: 20px; background: rgba(255,255,255,0.1);
+            border-radius: 10px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+        .progress-text { text-align: center; margin-top: 10px; color: rgba(255,255,255,0.7); }
+        .result {
+            display: none; margin-top: 30px; padding: 20px;
+            background: rgba(255,255,255,0.05); border-radius: 10px;
+        }
+        .result.active { display: block; }
+        .audio-player { width: 100%; margin: 15px 0; }
+        .info-box {
+            background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;
+            margin: 10px 0; border: 1px solid rgba(255,255,255,0.1);
+            font-family: monospace; font-size: 13px; color: rgba(255,255,255,0.9);
+        }
+        .info-box p { margin: 5px 0; }
+        .loading-spinner {
+            display: inline-block; width: 20px; height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%; border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .chunk-status {
+            display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0;
+        }
+        .chunk-dot {
+            width: 24px; height: 24px; border-radius: 50%;
+            background: rgba(255,255,255,0.2); display: flex;
+            align-items: center; justify-content: center;
+            font-size: 10px; color: rgba(255,255,255,0.7);
+            transition: all 0.3s;
+        }
+        .chunk-dot.processing {
+            background: rgba(255,193,7,0.5);
+            animation: pulse 1s infinite;
+        }
+        .chunk-dot.done {
+            background: rgba(40,167,69,0.5);
+        }
+        .chunk-dot.error {
+            background: rgba(220,53,69,0.5);
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Kokoro TTS Server</h1>
+            <p>SSE Streaming Audio Synthesis</p>
+        </div>
+        
+        <div class="content">
+            <div id="statusBar" class="status-bar loading">
+                <span class="loading-spinner"></span> 正在连接服务器...
+            </div>
+            
+            <div class="input-section">
+                <label for="inputText">输入中文文本：</label>
+                <textarea id="inputText" placeholder="请输入中文文本">银行里有很多重要的事情。今天天气很好，适合出去走走。人工智能正在改变我们的生活方式，让我们一起来探索这个神奇的世界吧。</textarea>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label for="voiceSelect">选择语音风格：</label>
+                    <select id="voiceSelect">
+                        <option value="zf_xiaobei">晓贝 (中文女声)</option>
+                        <option value="zf_xiaoni">晓妮 (中文女声)</option>
+                        <option value="zf_xiaoxiao">晓晓 (中文女声)</option>
+                        <option value="zf_xiaoyi">晓伊 (中文女声)</option>
+                        <option value="zm_yunjian">云健 (中文男声)</option>
+                        <option value="zm_yunxi">云希 (中文男声)</option>
+                        <option value="zm_yunxia">云夏 (中文男声)</option>
+                        <option value="zm_yunyang">云扬 (中文男声)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="speedInput">语速：</label>
+                    <input type="number" id="speedInput" min="0.5" max="2.0" step="0.1" value="1.0">
+                </div>
+            </div>
+            
+            <div class="buttons">
+                <button id="synthesizeBtn">
+                    <span>🎵</span> 生成语音 (流式)
+                </button>
+                <button id="stopBtn" disabled>
+                    <span>⏹</span> 停止
+                </button>
+            </div>
+            
+            <div class="progress-container" id="progressContainer" style="display:none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+                <div class="progress-text" id="progressText">准备中...</div>
+                <div class="chunk-status" id="chunkStatus"></div>
+            </div>
+            
+            <div class="result" id="result">
+                <h3>🔊 播放结果</h3>
+                <audio id="audioPlayer" class="audio-player" controls></audio>
+                <div class="info-box" id="infoBox"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SAMPLE_RATE = 24000;
+        let eventSource = null;
+        let audioCtx = null;
+        let isPlaying = false;
+        let audioQueue = [];
+        let totalChunks = 0;
+        let nextExpectedChunk = 0;
+        let pendingChunks = new Map();
+        
+        function updateStatus(text, className) {
+            const bar = document.getElementById('statusBar');
+            bar.className = 'status-bar ' + className;
+            bar.textContent = text;
+        }
+        
+        function showProgress(show, percent, text) {
+            const container = document.getElementById('progressContainer');
+            container.style.display = show ? 'block' : 'none';
+            if (show) {
+                document.getElementById('progressFill').style.width = percent + '%';
+                if (text) document.getElementById('progressText').textContent = text;
+            }
+        }
+        
+        function updateChunkStatus(index, status, total) {
+            const container = document.getElementById('chunkStatus');
+            while (container.children.length < total) {
+                const dot = document.createElement('div');
+                dot.className = 'chunk-dot';
+                dot.textContent = container.children.length + 1;
+                container.appendChild(dot);
+            }
+            if (index < container.children.length) {
+                container.children[index].className = 'chunk-dot ' + status;
+            }
+        }
+        
+        function queueChunk(index, pcmData) {
+            pendingChunks.set(index, pcmData);
+            while (pendingChunks.has(nextExpectedChunk)) {
+                audioQueue.push({ data: pendingChunks.get(nextExpectedChunk), id: nextExpectedChunk });
+                pendingChunks.delete(nextExpectedChunk);
+                nextExpectedChunk++;
+            }
+            playNext();
+        }
+        
+        function playNext() {
+            if (isPlaying || audioQueue.length === 0) return;
+            isPlaying = true;
+            
+            const { data, id } = audioQueue.shift();
+            
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            const floatData = new Float32Array(data.length / 2);
+            for (let i = 0; i < floatData.length; i++) {
+                const low = data[i*2];
+                const high = data[i*2+1];
+                const sample = (high << 8) | low;
+                const signed = sample > 32767 ? sample - 65536 : sample;
+                floatData[i] = signed / 32768.0;
+            }
+            
+            const fadeLen = Math.min(480, Math.floor(floatData.length / 2));
+            const isFirst = id === 0;
+            const isLast = false;
+            
+            const fadeIn = !isFirst;
+            const fadeOut = true;
+            
+            if (fadeIn) {
+                for (let i = 0; i < fadeLen; i++) {
+                    const t = i / fadeLen;
+                    floatData[i] *= t;
+                }
+            }
+            if (fadeOut) {
+                for (let i = 0; i < fadeLen; i++) {
+                    const t = i / fadeLen;
+                    floatData[floatData.length - 1 - i] *= t;
+                }
+            }
+            
+            const buf = audioCtx.createBuffer(1, floatData.length, SAMPLE_RATE);
+            buf.copyToChannel(floatData, 0);
+            const src = audioCtx.createBufferSource();
+            src.buffer = buf;
+            src.connect(audioCtx.destination);
+            src.onended = () => { isPlaying = false; playNext(); };
+            src.start();
+            
+            document.getElementById('result').classList.add('active');
+        }
+        
+        function synthesizeChunkComplete() {
+            // Called when all chunks are done - update UI
+        }
+        
+        async function synthesize() {
+            const text = document.getElementById('inputText').value.trim();
+            if (!text) {
+                alert('请输入文本');
+                return;
+            }
+            
+            const voice = document.getElementById('voiceSelect').value;
+            const speed = parseFloat(document.getElementById('speedInput').value) || 1.0;
+            
+            nextExpectedChunk = 0;
+            pendingChunks.clear();
+            audioQueue = [];
+            isPlaying = false;
+            totalChunks = 0;
+            document.getElementById('chunkStatus').innerHTML = '';
+            
+            showProgress(true, 0, '正在连接服务器...');
+            document.getElementById('synthesizeBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            try {
+                const response = await fetch('/tts/stream', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, voice, speed })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let totalDuration = 0;
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data:')) {
+                            try {
+                                const jsonStr = line.substring(5).trim();
+                                console.log('SSE data:', jsonStr.substring(0, 100));
+                                const data = JSON.parse(jsonStr);
+                                console.log('Parsed:', Object.keys(data));
+                                
+                                if (data.chunk_index !== undefined && data.total_chunks !== undefined) {
+                                    totalChunks = data.total_chunks;
+                                    const percent = Math.floor((data.chunk_index / data.total_chunks) * 100);
+                                    showProgress(true, percent, data.message);
+                                    updateChunkStatus(data.chunk_index, 'processing', data.total_chunks);
+                                } else if (data.audio_base64 !== undefined) {
+                                    console.log('Received audio chunk:', data.chunk_index, 'base64 length:', data.audio_base64.length);
+                                    const pcmData = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+                                    console.log('PCM data size:', pcmData.length);
+                                    updateChunkStatus(data.chunk_index, 'done', totalChunks);
+                                    queueChunk(data.chunk_index, pcmData);
+                                } else if (data.total_duration !== undefined) {
+                                    console.log('Complete, duration:', data.total_duration);
+                                    totalDuration = data.total_duration;
+                                    showProgress(true, 100, '完成！');
+                                    
+                                    document.getElementById('infoBox').innerHTML = `
+                                        <p><strong>原文：</strong>${text.substring(0, 100)}${text.length > 100 ? '...' : ''}</p>
+                                        <p><strong>分段数：</strong>${totalChunks}</p>
+                                        <p><strong>采样率：</strong>${SAMPLE_RATE} Hz</p>
+                                        <p><strong>音频时长：</strong>${totalDuration.toFixed(2)} 秒</p>
+                                    `;
+                                     
+                                     synthesizeChunkComplete();
+                                } else if (data.message && data.message.includes('Failed')) {
+                                    updateStatus(`❌ 错误: ${data.message}`, 'error');
+                                }
+                            } catch (e) {
+                                console.warn('Failed to parse SSE data:', e);
+                            }
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Synthesis failed:', error);
+                updateStatus(`❌ 合成失败: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('synthesizeBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+            }
+        }
+        
+        function stopSynthesis() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            document.getElementById('synthesizeBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            showProgress(false);
+        }
+        
+        async function checkHealth() {
+            try {
+                const response = await fetch('/health');
+                if (response.ok) {
+                    updateStatus('✅ 服务器已就绪', 'ready');
+                    document.getElementById('synthesizeBtn').disabled = false;
+                } else {
+                    updateStatus('❌ 服务器异常', 'error');
+                }
+            } catch (e) {
+                updateStatus('❌ 无法连接服务器', 'error');
+            }
+        }
+        
+        document.getElementById('synthesizeBtn').addEventListener('click', synthesize);
+        document.getElementById('stopBtn').addEventListener('click', stopSynthesis);
+        
+        window.addEventListener('load', checkHealth);
+    </script>
+</body>
+</html>

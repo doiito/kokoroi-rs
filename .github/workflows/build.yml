@@ -1,0 +1,336 @@
+# CI/CD workflow for kokoroi-rs
+# Builds koko + kokoros-server for three targets:
+#   - x86_64-unknown-linux-musl   (fully static musl ELF)
+#   - aarch64-unknown-linux-musl  (fully static musl ELF)
+#   - x86_64-pc-windows-msvc      (MSVC, linked dynamically against onnxruntime.dll)
+#
+# Linux musl: ONNX Runtime is built from source and cached.
+#   First run ~20–30 min (ORT cmake build); subsequent runs ~2–5 min.
+# Windows MSVC: Pre-built ORT is downloaded from GitHub releases.
+#
+# On tag push (v*) a GitHub Release is created with tarballs/zips.
+
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORT_VERSION: "1.23.2"
+  MUSL_TC_DIR: ${{ github.workspace }}/.musl-tc
+  ORT_SRC_DIR: ${{ github.workspace }}/.ort-src
+  ORT_INSTALL_DIR: ${{ github.workspace }}/.ort-install
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build for one target  (matrix: 2× Linux musl + Windows MSVC)
+  # ---------------------------------------------------------------------------
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            toolchain_name: x86_64-linux-musl
+            toolchain_url: https://musl.cc/x86_64-linux-musl-cross.tgz
+            kind: linux-musl
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            toolchain_name: aarch64-linux-musl
+            toolchain_url: https://musl.cc/aarch64-linux-musl-cross.tgz
+            kind: linux-musl
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            kind: windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ===================================================================
+      #  L i n u x   o n l y   —  system deps + musl-cross + ORT from src
+      # ===================================================================
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            cmake ninja-build protobuf-compiler wget xz-utils
+
+      # ----- musl-cross toolchain ----------------------------------------
+      - name: Cache musl-cross toolchain (Linux)
+        if: runner.os == 'Linux'
+        id: cache-tc
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.MUSL_TC_DIR }}
+          key: musl-tc-${{ matrix.target }}
+
+      - name: Download musl-cross toolchain (Linux)
+        if: runner.os == 'Linux' && steps.cache-tc.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$MUSL_TC_DIR"
+          echo "Downloading ${{ matrix.toolchain_url }} …"
+          wget -q "${{ matrix.toolchain_url }}" -O /tmp/tc.tgz
+          tar -xzf /tmp/tc.tgz -C "$MUSL_TC_DIR/"
+          ls -la "$MUSL_TC_DIR/"
+
+      # ----- ONNX Runtime source (Linux, build from source) -------------
+      - name: Cache ONNX Runtime source (Linux)
+        if: runner.os == 'Linux'
+        id: cache-ort-src
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ORT_SRC_DIR }}
+          key: ort-src-${{ env.ORT_VERSION }}
+
+      - name: Download ONNX Runtime source (Linux)
+        if: runner.os == 'Linux' && steps.cache-ort-src.outputs.cache-hit != 'true'
+        run: |
+          echo "Downloading ONNX Runtime v$ORT_VERSION source …"
+          wget -q "https://github.com/microsoft/onnxruntime/archive/refs/tags/v$ORT_VERSION.tar.gz" -O /tmp/ort.tgz
+          mkdir -p "$ORT_SRC_DIR"
+          tar -xzf /tmp/ort.tgz -C "$ORT_SRC_DIR" --strip-components=1
+          echo "Source at $ORT_SRC_DIR  cmake/: $([ -d ${ORT_SRC_DIR}/cmake ] && echo OK || echo MISSING)"
+
+      - name: Cache ONNX Runtime build (Linux)
+        if: runner.os == 'Linux'
+        id: cache-ort-build
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ORT_INSTALL_DIR }}/${{ matrix.target }}
+          key: ort-build-${{ matrix.target }}-${{ env.ORT_VERSION }}-${{ hashFiles('scripts/build_ort_musl.sh') }}
+
+      - name: Build ONNX Runtime from source (Linux)
+        if: runner.os == 'Linux' && steps.cache-ort-build.outputs.cache-hit != 'true'
+        run: |
+          TC_DIR=$(find "$MUSL_TC_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)
+          if [ -z "$TC_DIR" ]; then
+            echo "FATAL: no toolchain directory found under $MUSL_TC_DIR"
+            ls -la "$MUSL_TC_DIR/"
+            exit 1
+          fi
+          echo "Toolchain: $TC_DIR"
+          echo "  compiler: $TC_DIR/bin/${{ matrix.toolchain_name }}-gcc"
+          mkdir -p "$ORT_INSTALL_DIR/${{ matrix.target }}"
+          bash scripts/build_ort_musl.sh \
+            "${{ matrix.target }}" \
+            "$TC_DIR" \
+            "$ORT_SRC_DIR" \
+            "$ORT_INSTALL_DIR/${{ matrix.target }}"
+
+      # ===================================================================
+      #  W i n d o w s   o n l y   —  pre-built ORT from GitHub releases
+      # ===================================================================
+
+      - name: Download ONNX Runtime (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $ortBase = "$env:ORT_INSTALL_DIR\${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path $ortBase
+          $zipUrl = "https://github.com/microsoft/onnxruntime/releases/download/v$env:ORT_VERSION/onnxruntime-win-x64-$env:ORT_VERSION.zip"
+          Write-Output "Downloading ORT from $zipUrl"
+          Invoke-WebRequest -Uri $zipUrl -OutFile "$ortBase\ort.zip"
+          Expand-Archive -Path "$ortBase\ort.zip" -DestinationPath "$ortBase" -Force
+          # Extract dir is versioned, e.g. onnxruntime-win-x64-1.23.2/
+          $extractDir = Get-ChildItem -Path $ortBase -Directory | Select-Object -First 1 | Select-Object -ExpandProperty FullName
+          Write-Output "ORT extracted to $extractDir"
+          # Point ORT_LIB_LOCATION to the lib\ subdirectory (contains onnxruntime.lib)
+          "ORT_LIB_LOCATION=$extractDir\lib" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ORT_EXTRACT_DIR=$extractDir"      | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ===================================================================
+      #  R u s t   b u i l d   e n v i r o n m e n t
+      # ===================================================================
+
+      - name: Set up build environment (Linux musl)
+        if: runner.os == 'Linux'
+        run: |
+          TC_DIR=$(find "$MUSL_TC_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)
+          TARGET_UPPER=$(echo "${{ matrix.target }}" | tr '[:lower:]-' '[:upper:]_')
+          echo "CARGO_TARGET_${TARGET_UPPER}_LINKER=${TC_DIR}/bin/${{ matrix.toolchain_name }}-gcc" >> "$GITHUB_ENV"
+          echo "ORT_LIB_LOCATION=${ORT_INSTALL_DIR}/${{ matrix.target }}" >> "$GITHUB_ENV"
+          echo "RUSTFLAGS=-C target-feature=+crt-static" >> "$GITHUB_ENV"
+          echo "${TC_DIR}/bin" >> "$GITHUB_PATH"
+
+      - name: Set up build environment (Windows MSVC)
+        if: runner.os == 'Windows'
+        run: |
+          # ORT_LIB_LOCATION is already set in the download step.
+          # Dynamic linking (default): ort-sys links onnxruntime.lib import lib,
+          # onnxruntime.dll must be alongside the exe at runtime.
+          "ORT_PREFER_DYNAMIC_LINK=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ----- Rust toolchain ------------------------------------------------
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # ===================================================================
+      #  C o m p i l e
+      # ===================================================================
+      #
+      # Linux musl: --no-default-features avoids audio-encode deps
+      # (mp3lame-sys, audiopus_sys) that don't cross-compile under musl.
+      # Windows MSVC: default features, matching the Windows build script.
+
+      - name: Build koko (Linux)
+        if: runner.os == 'Linux'
+        run: cargo build --release -p koko --target ${{ matrix.target }} --no-default-features
+
+      - name: Build koko (Windows)
+        if: runner.os == 'Windows'
+        run: cargo build --release -p koko --target ${{ matrix.target }}
+
+      - name: Build kokoros-server (Linux)
+        if: runner.os == 'Linux'
+        run: cargo build --release -p kokoros-server --target ${{ matrix.target }} --no-default-features
+
+      - name: Build kokoros-server (Windows)
+        if: runner.os == 'Windows'
+        run: cargo build --release -p kokoros-server --target ${{ matrix.target }}
+
+      # ===================================================================
+      #  P o s t - b u i l d
+      # ===================================================================
+
+      - name: Copy onnxruntime.dll alongside Windows exe
+        if: runner.os == 'Windows'
+        run: |
+          Copy-Item "$env:ORT_EXTRACT_DIR\bin\onnxruntime.dll" -Destination "target\${{ matrix.target }}\release\" -Force
+          Write-Output "onnxruntime.dll copied to release dir"
+
+      - name: Verify binaries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "=== koko ==="
+          file target/${{ matrix.target }}/release/koko
+          ls -lh target/${{ matrix.target }}/release/koko
+          echo ""
+          echo "=== kokoros-server ==="
+          file target/${{ matrix.target }}/release/kokoros-server
+          ls -lh target/${{ matrix.target }}/release/kokoros-server
+
+      - name: Verify binaries (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          Write-Output "=== koko ==="
+          Get-Item target/${{ matrix.target }}/release/koko.exe   | Select-Object Name, Length
+          Write-Output "=== kokoros-server ==="
+          Get-Item target/${{ matrix.target }}/release/kokoros-server.exe | Select-Object Name, Length
+          Write-Output "=== onnxruntime.dll ==="
+          Get-Item target/${{ matrix.target }}/release/onnxruntime.dll | Select-Object Name, Length
+
+      - name: Upload build artifacts (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kokoro-binaries-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/koko
+            target/${{ matrix.target }}/release/kokoros-server
+          if-no-files-found: error
+
+      - name: Upload build artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kokoro-binaries-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/koko.exe
+            target/${{ matrix.target }}/release/kokoros-server.exe
+            target/${{ matrix.target }}/release/onnxruntime.dll
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # GitHub Release  (only on tag push v*)
+  # ---------------------------------------------------------------------------
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Package release tarballs
+        run: |
+          set -e
+
+          # -- x86_64 musl --
+          mkdir -p dist/x86_64
+          cp kokoro-binaries-x86_64-unknown-linux-musl/koko             dist/x86_64/
+          cp kokoro-binaries-x86_64-unknown-linux-musl/kokoros-server   dist/x86_64/
+          cp README.md dist/x86_64/
+          cp config.toml dist/x86_64/
+          tar czf dist/kokoro-x86_64-unknown-linux-musl.tar.gz -C dist/x86_64 .
+
+          # -- aarch64 musl --
+          mkdir -p dist/aarch64
+          cp kokoro-binaries-aarch64-unknown-linux-musl/koko            dist/aarch64/
+          cp kokoro-binaries-aarch64-unknown-linux-musl/kokoros-server  dist/aarch64/
+          cp README.md dist/aarch64/
+          cp config.toml dist/aarch64/
+          tar czf dist/kokoro-aarch64-unknown-linux-musl.tar.gz -C dist/aarch64 .
+
+          # -- Windows MSVC --
+          mkdir -p dist/win64
+          cp kokoro-binaries-x86_64-pc-windows-msvc/koko.exe            dist/win64/
+          cp kokoro-binaries-x86_64-pc-windows-msvc/kokoros-server.exe  dist/win64/
+          cp kokoro-binaries-x86_64-pc-windows-msvc/onnxruntime.dll     dist/win64/
+          cp README.md dist/win64/
+          cp config.toml dist/win64/
+          cd dist/win64 && zip -r ../kokoro-x86_64-pc-windows-msvc.zip . && cd ../..
+
+          echo "--- Release artifacts ---"
+          ls -lh dist/*.{tar.gz,zip}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## kokoroi-rs ${{ github.ref_name }}
+
+            ### Linux (fully static musl)
+            - `kokoro-x86_64-unknown-linux-musl.tar.gz` — x86_64, zero runtime deps
+            - `kokoro-aarch64-unknown-linux-musl.tar.gz` — ARM64, zero runtime deps
+
+            ### Windows
+            - `kokoro-x86_64-pc-windows-msvc.zip` — x86_64, requires onnxruntime.dll (included)
+
+            ### Contents (per archive)
+            - `koko` / `koko.exe` — CLI text-to-speech tool
+            - `kokoros-server` / `kokoros-server.exe` — HTTP API server
+            - `onnxruntime.dll` — (Windows only) ONNX Runtime shared library
+            - `README.md` — usage documentation
+            - `config.toml` — default server config
+
+            ### Notes
+            - Linux: built with ONNX Runtime ${{ env.ORT_VERSION }} (static, CPU only, musl)
+            - Windows: built with ONNX Runtime ${{ env.ORT_VERSION }} (dynamic, CPU only, MSVC)
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+          generate_release_notes: true

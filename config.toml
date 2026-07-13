@@ -1,0 +1,7 @@
+# Kokoro TTS Server Configuration
+host = "0.0.0.0"
+port = 3000
+threads = 4
+max_chars = 400
+model_path = "models/kokoro-v1.0.onnx"
+voices_path = "data/voices-v1.0.bin"

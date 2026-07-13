@@ -1,0 +1,23 @@
+[package]
+name = "koko"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["audio"]
+audio = ["rodio"]
+
+[dependencies]
+kokoros = { path = "../kokoros-core", features = ["ort", "download"] }
+
+clap = { version = "4.5.39", features = ["derive"] }
+tokio = { version = "1.45.1", features = ["io-util", "rt-multi-thread", "net", "macros", "io-std"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hound = "3.5.1"
+regex = "1"
+rodio = { version = "0.20", optional = true }
+crossbeam = "0.8"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+rodio = { version = "0.20" }

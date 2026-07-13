@@ -1,0 +1,25 @@
+[package]
+name = "kokoros-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+kokoros = { path = "../kokoros-core", features = ["ort"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+axum = { version = "0.8", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs"] }
+futures = "0.3"
+tokio-stream = "0.1"
+parking_lot = "0.12"
+toml = "0.8"
+base64 = "0.22"
+hound = "3.5"
+regex = "1.10"
+
+[features]
+default = []
