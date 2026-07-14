@@ -118,6 +118,23 @@ if command -v ninja &>/dev/null; then
 fi
 
 echo ""
+echo "--- Patching ORT cmake files ---"
+
+# Exclude files from core/providers/cpu/ that depend on external libraries
+# we do not build (re2 for regex_full_match, contrib_ops for fp16_conv).
+# These are NOT in contrib_ops/ so DISABLE_CONTRIB_OPS=ON cannot exclude them.
+PROVIDERS_CMAKE="${ORT_SRC}/cmake/onnxruntime_providers_cpu.cmake"
+sed -i '/^file(GLOB_RECURSE onnxruntime_providers_srcs CONFIGURE_DEPENDS$/,/^)$/{
+  /^)$/a\
+list(REMOVE_ITEM onnxruntime_providers_srcs\
+  "${ONNXRUNTIME_ROOT}\/core\/providers\/cpu\/text\/regex_full_match.h"\
+  "${ONNXRUNTIME_ROOT}\/core\/providers\/cpu\/text\/regex_full_match.cc"\
+  "${ONNXRUNTIME_ROOT}\/core\/providers\/cpu\/fp16\/fp16_conv.cc"\
+)
+}' "$PROVIDERS_CMAKE"
+echo "Patched $PROVIDERS_CMAKE to exclude re2/contrib-dependent sources"
+
+echo ""
 echo "--- Configuring ORT ---"
 
 # Create stub execinfo.h for musl (musl lacks this glibc header, but ORT's
@@ -152,8 +169,6 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -DCMAKE_TOOLCHAIN_FILE="/tmp/ort-toolchain-${TARGET//\//-}.cmake" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-    -DCMAKE_C_FLAGS="$ARCH_CFLAGS ${STUB_INCLUDE}" \
-    -DCMAKE_CXX_FLAGS="$ARCH_CFLAGS ${STUB_INCLUDE}" \
     -DCMAKE_CXX_STANDARD=17 \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DPROTOBUF_PROTOC_EXECUTABLE="/usr/bin/protoc" \
@@ -182,7 +197,8 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -Donnxruntime_USE_OPENMP=OFF \
     -Donnxruntime_DISABLE_ML_OPS=ON \
     -Donnxruntime_DISABLE_CONTRIB_OPS=ON \
-    -DCMAKE_CXX_FLAGS="-Wno-error=unused-parameter" \
+    -DCMAKE_C_FLAGS="-Wno-error=unused-parameter ${ARCH_CFLAGS} -I${MUSL_STUBS_DIR}" \
+    -DCMAKE_CXX_FLAGS="-Wno-error=unused-parameter ${ARCH_CFLAGS} -I${MUSL_STUBS_DIR}" \
     -Donnxruntime_DISABLE_RTTI=ON \
     -Donnxruntime_MINIMAL_BUILD=ON \
     -Donnxruntime_EXTENDED_MINIMAL_BUILD=ON \

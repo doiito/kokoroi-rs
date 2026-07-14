@@ -47,7 +47,7 @@ struct Cli {
     #[arg(short = 'l', long = "lan", default_value = "zh")]
     lan: String,
 
-    #[arg(short = 'm', long = "model", default_value = "models/tiandy_tts_v1.0-zh_s.onnx")]
+    #[arg(short = 'm', long = "model", default_value = "models/kokoro-v1.0.onnx")]
     model_path: String,
 
     #[arg(short = 'd', long = "data", default_value = "data/voices-v1.0.bin")]
