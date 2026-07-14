@@ -118,6 +118,19 @@ if command -v ninja &>/dev/null; then
 fi
 
 echo ""
+echo "--- Patching ORT cmake files ---"
+
+# re2 is declared with EXCLUDE_FROM_ALL in cmake/external/onnxruntime_external_deps.cmake
+# This means libre2.a is NEVER built by default — headers are available for compilation
+# but the static library is missing. The combine script can't find it, and Rust linker
+# errors out with undefined re2 symbols from regex_full_match.cc and tokenizer.cc.
+# Fix: remove the EXCLUDE_FROM_ALL line so re2 is actually built.
+sed -i '/onnxruntime_fetchcontent_declare(\|    re2/,/^)/{
+    /EXCLUDE_FROM_ALL/d
+}' "${ORT_SRC}/cmake/external/onnxruntime_external_deps.cmake"
+echo "Patched re2 to remove EXCLUDE_FROM_ALL"
+
+echo ""
 echo "--- Configuring ORT ---"
 
 # Create stub execinfo.h for musl (musl lacks this glibc header, but ORT's
