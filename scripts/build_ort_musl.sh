@@ -125,7 +125,10 @@ echo "--- Patching ORT cmake files ---"
 # but the static library is missing. The combine script can't find it, and Rust linker
 # errors out with undefined re2 symbols from regex_full_match.cc and tokenizer.cc.
 # Fix: remove the EXCLUDE_FROM_ALL line so re2 is actually built.
-sed -i '/onnxruntime_fetchcontent_declare(\|    re2/,/^)/{
+# Match from the `    re2` line (package declaration body) to the closing `)`
+# This is specific enough to NOT catch other single-line declarations
+# (like protoc_binary) which would otherwise be entirely deleted.
+sed -i '/    re2$/,/^)/{
     /EXCLUDE_FROM_ALL/d
 }' "${ORT_SRC}/cmake/external/onnxruntime_external_deps.cmake"
 echo "Patched re2 to remove EXCLUDE_FROM_ALL"
