@@ -118,22 +118,6 @@ if command -v ninja &>/dev/null; then
 fi
 
 echo ""
-echo "--- Patching ORT cmake files ---"
-
-# re2 is declared with EXCLUDE_FROM_ALL in cmake/external/onnxruntime_external_deps.cmake
-# This means libre2.a is NEVER built by default — headers are available for compilation
-# but the static library is missing. The combine script can't find it, and Rust linker
-# errors out with undefined re2 symbols from regex_full_match.cc and tokenizer.cc.
-# Fix: remove the EXCLUDE_FROM_ALL line so re2 is actually built.
-# Match from the `    re2` line (package declaration body) to the closing `)`
-# This is specific enough to NOT catch other single-line declarations
-# (like protoc_binary) which would otherwise be entirely deleted.
-sed -i '/    re2$/,/^)/{
-    /EXCLUDE_FROM_ALL/d
-}' "${ORT_SRC}/cmake/external/onnxruntime_external_deps.cmake"
-echo "Patched re2 to remove EXCLUDE_FROM_ALL"
-
-echo ""
 echo "--- Configuring ORT ---"
 
 # Create stub execinfo.h for musl (musl lacks this glibc header, but ORT's
@@ -206,6 +190,17 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
 echo ""
 echo "--- Building ORT ---"
 cmake --build "$BUILD_DIR" --config Release -j "$NUM_JOBS"
+
+echo ""
+echo "--- Building re2 explicitly (EXCLUDE_FROM_ALL prevents default build) ---"
+# re2 is declared with EXCLUDE_FROM_ALL in onnxruntime_external_deps.cmake
+# so cmake configures it but never builds it by default. ORT providers compile
+# against re2 headers (regex_full_match.cc, tokenizer.cc) but libre2.a is
+# never linked into libonnxruntime_providers.a — it stays as a standalone
+# static lib in _deps/re2-build/. We build it explicitly here so the combine
+# step can find and include libre2.a in the combined archive.
+cmake --build "$BUILD_DIR" --config Release -j "$NUM_JOBS" --target re2 2>&1 | tail -5
+echo "re2 build complete"
 
 echo ""
 echo "--- Installing ORT ---"
