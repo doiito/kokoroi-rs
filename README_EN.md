@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml/badge.svg)](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml)
 
-**kokoroi-rs** is a Rust implementation of [Kokoro TTS](https://github.com/kokoro-tts/kokoro), focusing on high-quality Chinese text-to-speech synthesis. Powered by the Kokoro model with ONNX Runtime inference, it offers both a CLI tool and an HTTP API server.
+**kokoroi-rs** is a Rust implementation of [Kokoro](https://github.com/hexgrad/kokoro), focusing on high-quality Chinese text-to-speech synthesis. Powered by the Kokoro model with ONNX Runtime inference, it offers both a CLI tool and an HTTP API server.
 
 ## Features
 
@@ -39,7 +39,7 @@ You need the following model files:
 
 Model files can be obtained from:
 
-1. The [Kokoro official project](https://github.com/kokoro-tts/kokoro)
+1. The [Kokoro official project](https://github.com/hexgrad/kokoro)
 2. Run `./scripts/download_models.sh`
 
 ### Using the CLI
@@ -303,6 +303,6 @@ This project is open source under the [MIT](LICENSE) license.
 
 ## Acknowledgements
 
-- [Kokoro TTS](https://github.com/kokoro-tts/kokoro) — Original model and training code
+- [Kokoro TTS](https://github.com/hexgrad/kokoro) — Original model and training code
 - [pyke/ort](https://github.com/pykeio/ort) — Rust ONNX Runtime bindings
 - [OnnxruntimeBuilder](https://github.com/csukuangfj/OnnxruntimeBuilder) — ONNX Runtime musl build scripts
