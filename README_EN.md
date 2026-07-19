@@ -2,7 +2,7 @@
 
 [![Build](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml/badge.svg)](https://github.com/doiito/kokoroi-rs/actions/workflows/build.yml)
 
-**kokoroi-rs** is a Rust implementation of [Kokoro](https://github.com/hexgrad/kokoro), focusing on high-quality Chinese text-to-speech synthesis. Powered by the Kokoro model with ONNX Runtime inference, it offers both a CLI tool and an HTTP API server.
+**kokoroi-rs** is a Rust implementation of [Kokoro](https://github.com/hexgrad/kokoro), focusing on high-quality Chinese text-to-speech synthesis. Powered by the Kokoro model with ONNX Runtime inference, it offers CLI, HTTP API server, and browser WASM modes.
 
 ## Features
 
@@ -10,9 +10,11 @@
 - 🚀 **High-Performance Inference** — Multi-threaded pipeline architecture with parallel generation, real-time factor of 5-10x
 - 📦 **Cross-Platform Static Builds** — Fully static musl ELF for Linux (x86_64 / ARM64), MSVC binaries for Windows — zero or minimal runtime dependencies
 - 🌐 **HTTP API Server** — Built-in Axum web server with REST API and SSE streaming, includes a web demo page
-- 🎤 **50+ Voice Styles** — Supports Chinese, Japanese, Korean, English, French, and more
+- 🌍 **Browser WASM Inference** — Compile to WASM via the `wasm` feature for in-browser TTS (oxionnx pure-Rust backend or ONNX Runtime Web)
+- 🎤 **50+ Voice Styles** — Supports Chinese, Japanese, Korean, English, French, Hindi, Italian, Portuguese, and Spanish
 - ✂️ **Smart Text Chunking** — Phoneme-limit-based chunking strategy balancing speed and naturalness
 - 📝 **Streaming Output** — SSE real-time streaming audio for low-latency web scenarios
+- 🐍 **Python Toolchain** — Model export (ONNX → Q8 quantization), G2P weight extraction, OpenAI-compatible test client, and a standalone Python server
 - 🤖 **CI/CD Automation** — GitHub Actions builds every platform on every push
 
 ## Quick Start
@@ -40,7 +42,7 @@ You need the following model files:
 Model files can be obtained from:
 
 1. The [Kokoro official project](https://github.com/hexgrad/kokoro)
-2. Run `./scripts/download_models.sh`
+2. Run `./scripts/download_all.sh`
 
 ### Using the CLI
 
@@ -140,6 +142,21 @@ voices_path = "data/voices-v1.0.bin"     # Voice data path
 
 Set the `KOKOROS_CONFIG` environment variable to use a custom config file.
 
+## Feature Flags
+
+The `kokoros-core` library provides these Cargo features:
+
+| Feature | Description | Default |
+|---------|-------------|---------|
+| `ort` | ONNX Runtime backend (pyke/ort) | ✅ |
+| `chinese` | Chinese language support (segmentation, normalization) | ✅ |
+| `cuda` | CUDA GPU inference | ❌ |
+| `wasm` | WASM browser target (oxionnx backend) | ❌ |
+| `onnx` | tract-onnx pure-Rust ONNX inference | ❌ |
+| `download` | Automatic model downloading | ❌ |
+| `audio-encode` | MP3 / Opus encoding | ❌ |
+| `native` | Full-featured native build (ort + download + audio-encode) | ❌ |
+
 ## CI/CD Pipeline
 
 This project uses GitHub Actions to automatically build binaries for all supported platforms on every push and tag:
@@ -229,7 +246,7 @@ Expand-Archive ort.zip -DestinationPath C:\onnxruntime-win-x64-1.23.2
 
 ```powershell
 # Set environment variables
-$env:ORT_LIB_LOCATION = "C:\onnxruntime-win-x64-1.23.2\lib"
+$env:ORT_LIB_LOCATION = "C:\onnxruntime-x64-1.23.2\lib"
 $env:ORT_PREFER_DYNAMIC_LINK = "1"
 
 # Build
@@ -237,39 +254,120 @@ cargo build --release -p koko --target x86_64-pc-windows-msvc
 cargo build --release -p kokoros-server --target x86_64-pc-windows-msvc
 
 # Copy DLL alongside the exes
-Copy-Item "C:\onnxruntime-win-x64-1.23.2\bin\onnxruntime.dll" "target\x86_64-pc-windows-msvc\release\"
+Copy-Item "C:\onnxruntime-x64-1.23.2\bin\onnxruntime.dll" "target\x86_64-pc-windows-msvc\release\"
 ```
 
 > Windows uses dynamic linking by default — `onnxruntime.dll` must be in the same directory as the exe.
-> For static linking, build ORT from source and pass `-StaticLink` (see `build_windows.ps1`).
+> For static linking, build ORT from source and pass `-StaticLink` (see `scripts/build_windows.ps1`).
+
+### WASM (Browser)
+
+#### Prerequisites
+
+- Rust 1.85+ (install via [rustup](https://rustup.rs/))
+- wasm32 target: `rustup target add wasm32-unknown-unknown`
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
+
+#### Build
+
+```bash
+# One-click build
+./scripts/build_wasm.sh
+
+# Or manually
+wasm-pack build crates/kokoros-core \
+  --target web \
+  --out-dir ../../static/wasm-pkg \
+  -- \
+  --features wasm \
+  --no-default-features
+```
+
+Output goes to `static/wasm-pkg/`:
+
+| File | Description |
+|------|-------------|
+| `kokoros_bg.wasm` | WASM binary (~3MB) |
+| `kokoros.js` | wasm-bindgen glue code |
+| `kokoros.d.ts` | TypeScript declarations |
+
+Test in a browser via `wasm_demo.html`, `browser_demo.html`, or `rust_wasm_demo.html` in the `static/` directory.
+
+### Python Scripts
+
+The `scripts/` directory provides model export and utility tools:
+
+| Script | Purpose |
+|--------|---------|
+| `export_q8.py` | ONNX → Q8 quantized model export |
+| `test_q8_model.py` | Quantized model verification |
+| `extract_g2pm_weights.py` | G2P weight extraction (→ Rust constants) |
+| `run_openai.py` | OpenAI-compatible API test client |
+
+```bash
+pip install -r scripts/requirements.txt
+
+# Export Q8 quantized model
+python scripts/export_q8.py \
+  --kokoro-src /path/to/kokoro \
+  --output-dir ./models
+
+# Verify the exported model
+python scripts/test_q8_model.py --model ./models/model_fp16.onnx
+```
+
+Additionally, `static/server.py` provides a lightweight Python ONNX Runtime backend (no Rust build required):
+
+```bash
+cd static
+pip install onnxruntime numpy
+python server.py --port 8080
+```
 
 ## Project Structure
 
 ```
 kokoroi-rs/
 ├── .github/workflows/
-│   └── build.yml           # CI/CD multi-platform auto-build
+│   └── build.yml              # CI/CD multi-platform auto-build
 ├── crates/
-│   ├── koko-cli/           # CLI binary entrypoint
-│   ├── kokoros-core/       # Core TTS engine
-│   ├── kokoros-server/     # HTTP API server
-│   └── misaki/             # G2P engine (grapheme-to-phoneme)
+│   ├── koko-cli/              # CLI binary entrypoint
+│   ├── kokoros-core/          # Core TTS engine (includes WASM entrypoint)
+│   ├── kokoros-server/        # HTTP API server
+│   └── misaki/                # G2P engine (grapheme-to-phoneme)
 ├── scripts/
-│   ├── build_musl.sh       # x86_64 musl build (local prebuilt ORT)
-│   ├── build_aarch64_musl.sh # ARM64 musl build
-│   ├── build_ort_musl.sh   # Generic ORT from-source build + combined lib
+│   ├── build_musl.sh          # x86_64 musl build
+│   ├── build_aarch64_musl.sh  # ARM64 musl build
+│   ├── build_ort_musl.sh      # Generic ORT from-source build
+│   ├── build_native.sh        # Native glibc build (dev/debug)
+│   ├── build_wasm.sh          # WASM browser target build
+│   ├── build_windows.ps1      # Windows MSVC build
+│   ├── build_static.sh
+│   ├── package.sh             # Release packaging
+│   ├── download_all.sh        # One-click model download
+│   ├── download_models.sh
+│   ├── download_voices.sh
 │   ├── x86_64-musl-linker.sh
 │   ├── aarch64-musl-linker.sh
-│   ├── musl_stubs.c        # glibc stub for x86_64 musl ORT
-│   ├── build_native.sh     # Native glibc build (dev/debug)
-│   ├── build_static.sh
-│   ├── build_wasm.sh
-│   ├── package.sh
-│   ├── download_models.sh
-│   └── download_voices.sh
-├── config.toml             # Server configuration
-├── static/                 # Web page static assets
-└── data/                   # Model data (download separately)
+│   ├── musl_stubs.c           # glibc stub for musl ORT
+│   ├── export_q8.py           # ONNX → Q8 export
+│   ├── test_q8_model.py       # Q8 model verification
+│   ├── extract_g2pm_weights.py # G2P weight extraction
+│   ├── run_openai.py          # OpenAI API test client
+│   └── requirements.txt       # Python dependencies
+├── static/
+│   ├── index.html             # API server demo page
+│   ├── wasm_demo.html         # ONNX Runtime Web + WASM G2P demo
+│   ├── browser_demo.html      # Streaming synthesis demo
+│   ├── rust_wasm_demo.html    # Pure Rust WASM (oxionnx) demo
+│   ├── kokoros.d.ts           # WASM TypeScript type definitions
+│   ├── server.py              # Python backend server
+│   └── wasm-pkg/              # wasm-pack build output
+│       ├── kokoros_bg.wasm
+│       ├── kokoros.js
+│       └── kokoros.d.ts
+├── config.toml                # Server configuration
+└── data/                      # Model data (download separately)
 ```
 
 ## FAQ
@@ -288,6 +386,16 @@ With a combined `libonnxruntime.a` (produced by `scripts/build_ort_musl.sh`), no
 
 Make sure `onnxruntime.dll` is in the same directory as `koko.exe` / `kokoros-server.exe`. Release downloads include this DLL.
 
+### Q: WASM demo pages don't load
+
+WASM demo pages require additional model data files placed under `static/` (not included in the repository):
+
+- `models/onnx/model_fp16.onnx` — ONNX model file
+- `models/voices/voices.json` — Voice configuration
+- `models/voices/*.bin` — Voice style embedding data
+
+Refer to the [Kokoro official project](https://github.com/hexgrad/kokoro) for these files.
+
 ### Q: What do I need to build on Windows?
 
 Rust + MSVC toolchain. Install `rustup-init.exe` with the "default toolchain" option to get MSVC automatically, or install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (select the "C++ build tools" workload).
@@ -304,4 +412,5 @@ This project is open source under the [MIT](LICENSE) license.
 
 - [Kokoro TTS](https://github.com/hexgrad/kokoro) — Original model and training code
 - [pyke/ort](https://github.com/pykeio/ort) — Rust ONNX Runtime bindings
+- [oxionnx](https://github.com/pykeio/oxionnx) — Pure Rust ONNX inference engine (WASM)
 - [OnnxruntimeBuilder](https://github.com/csukuangfj/OnnxruntimeBuilder) — ONNX Runtime musl build scripts
