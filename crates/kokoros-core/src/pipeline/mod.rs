@@ -2,6 +2,7 @@ mod generator;
 mod preprocessor;
 mod queue;
 mod text_splitter;
+#[cfg(feature = "ort")]
 mod tts_backend;
 mod types;
 

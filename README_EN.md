@@ -253,7 +253,6 @@ kokoroi-rs/
 │   ├── koko-cli/           # CLI binary entrypoint
 │   ├── kokoros-core/       # Core TTS engine
 │   ├── kokoros-server/     # HTTP API server
-│   ├── kokoros-openai/     # OpenAI-compatible API
 │   └── misaki/             # G2P engine (grapheme-to-phoneme)
 ├── scripts/
 │   ├── build_musl.sh       # x86_64 musl build (local prebuilt ORT)

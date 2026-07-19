@@ -56,8 +56,7 @@ cargo build --release -p koko --target x86_64-unknown-linux-musl --no-default-fe
 echo "Building kokoros-server (musl)..."
 cargo build --release -p kokoros-server --target x86_64-unknown-linux-musl --no-default-features
 
-# Note: kokoros-openai is NOT built for musl — its audio-encode deps
-# (mp3lame-sys, audiopus_sys) don't cross-compile under musl toolchain.
+
 
 BUILD_DIR="${PROJECT_DIR}/target/x86_64-unknown-linux-musl/release"
 echo ""

@@ -257,7 +257,6 @@ kokoroi-rs/
 │   ├── koko-cli/           # CLI 工具入口
 │   ├── kokoros-core/       # 核心 TTS 引擎
 │   ├── kokoros-server/     # HTTP API 服务器
-│   ├── kokoros-openai/     # OpenAI 兼容 API
 │   └── misaki/             # G2P（字素转音素）引擎
 ├── scripts/
 │   ├── build_musl.sh       # x86_64 musl 构建（本地预编译 ORT）

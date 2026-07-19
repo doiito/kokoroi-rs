@@ -4,7 +4,6 @@ members = [
     "crates/kokoros-core",
     "crates/koko-cli",
     "crates/kokoros-server",
-    "crates/kokoros-openai",
     "crates/misaki",
 ]
 
