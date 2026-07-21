@@ -298,11 +298,54 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # WASM browser target  (oxionnx backend, no ORT needed)
+  # ---------------------------------------------------------------------------
+  wasm:
+    name: wasm32-unknown-unknown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Build WASM
+        run: |
+          wasm-pack build crates/kokoros-core \
+            --target web \
+            --out-dir ../../static/wasm-pkg \
+            -- \
+            --features wasm \
+            --no-default-features
+
+      - name: List WASM artifacts
+        run: ls -lh static/wasm-pkg/
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kokoro-wasm
+          path: static/wasm-pkg/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
   # GitHub Release  (only on tag push v*)
   # ---------------------------------------------------------------------------
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build]
+    needs: [build, wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -342,6 +385,14 @@ jobs:
           cp config.toml dist/win64/
           cd dist/win64 && zip -r ../kokoro-x86_64-pc-windows-msvc.zip . && cd ../..
 
+          # -- WASM browser target --
+          mkdir -p dist/wasm
+          cp kokoro-wasm/kokoros_bg.wasm   dist/wasm/
+          cp kokoro-wasm/kokoros.js        dist/wasm/
+          cp kokoro-wasm/kokoros.d.ts      dist/wasm/
+          cp -r ../static/*.html dist/wasm/ 2>/dev/null || true
+          tar czf dist/kokoro-wasm.tar.gz -C dist/wasm .
+
           echo "--- Release artifacts ---"
           ls -lh dist/*.{tar.gz,zip}
 
@@ -364,6 +415,22 @@ jobs:
             - `onnxruntime.dll` — (Windows only) ONNX Runtime shared library
             - `README.md` — usage documentation
             - `config.toml` — default server config
+
+            ### WASM (browser)
+            - `kokoro-wasm.tar.gz` — WASM browser package, zero server needed
+
+            ### Contents (per archive)
+            - `koko` / `koko.exe` — CLI text-to-speech tool
+            - `kokoros-server` / `kokoros-server.exe` — HTTP API server
+            - `onnxruntime.dll` — (Windows only) ONNX Runtime shared library
+            - `README.md` — usage documentation
+            - `config.toml` — default server config
+
+            ### WASM archive contents
+            - `kokoros_bg.wasm` — WASM binary (~6MB, jieba-rs + oxionnx)
+            - `kokoros.js` — wasm-bindgen glue code
+            - `kokoros.d.ts` — TypeScript type declarations
+            - `*.html` — browser demo pages
 
             ### Notes
             - Linux: built with ONNX Runtime ${{ env.ORT_VERSION }} (static, CPU only, musl)
