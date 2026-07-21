@@ -287,7 +287,7 @@ Output goes to `static/wasm-pkg/`:
 
 | File | Description |
 |------|-------------|
-| `kokoros_bg.wasm` | WASM binary (~3MB) |
+| `kokoros_bg.wasm` | WASM binary (~6MB, includes jieba segmentation dictionary) |
 | `kokoros.js` | wasm-bindgen glue code |
 | `kokoros.d.ts` | TypeScript declarations |
 

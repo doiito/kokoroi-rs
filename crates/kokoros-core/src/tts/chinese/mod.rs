@@ -10,7 +10,6 @@ use std::collections::HashSet;
 pub use transcription::ZH_MAP;
 pub use polyphonic::PolyphonicDisambiguator;
 
-#[cfg(not(target_arch = "wasm32"))]
 lazy_static::lazy_static! {
     static ref JIEBA: std::sync::Mutex<jieba_rs::Jieba> = std::sync::Mutex::new(jieba_rs::Jieba::new());
 }
@@ -158,7 +157,6 @@ impl ChineseG2P {
         result
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn segment(text: &str) -> Vec<String> {
         let jieba = JIEBA.lock().unwrap();
         jieba
@@ -168,12 +166,6 @@ impl ChineseG2P {
             .collect()
     }
 
-    #[cfg(target_arch = "wasm32")]
-    fn segment(text: &str) -> Vec<String> {
-        Self::simple_segment(text)
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     fn segment_with_pos(text: &str) -> Vec<(String, String)> {
         let jieba = JIEBA.lock().unwrap();
         jieba
@@ -181,40 +173,6 @@ impl ChineseG2P {
             .into_iter()
             .map(|t| (t.word.to_string(), t.tag.to_string()))
             .collect()
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    fn segment_with_pos(text: &str) -> Vec<(String, String)> {
-        Self::simple_segment(text)
-            .into_iter()
-            .map(|w| (w, "n".to_string()))
-            .collect()
-    }
-
-    fn simple_segment(text: &str) -> Vec<String> {
-        let mut words = Vec::new();
-        let mut current = String::new();
-
-        for ch in text.chars() {
-            if Self::is_chinese_char(ch) {
-                if !current.is_empty() {
-                    words.push(std::mem::take(&mut current));
-                }
-                words.push(ch.to_string());
-            } else if ch.is_whitespace() {
-                if !current.is_empty() {
-                    words.push(std::mem::take(&mut current));
-                }
-            } else {
-                current.push(ch);
-            }
-        }
-
-        if !current.is_empty() {
-            words.push(current);
-        }
-
-        words
     }
 
     fn word_to_pinyin(word: &str) -> Vec<String> {

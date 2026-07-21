@@ -287,7 +287,7 @@ wasm-pack build crates/kokoros-core \
 产物输出到 `static/wasm-pkg/`：
 | 文件 | 说明 |
 |------|------|
-| `kokoros_bg.wasm` | WASM 二进制 (约 3MB) |
+| `kokoros_bg.wasm` | WASM 二进制 (约 6MB，含 jieba 分词词典) |
 | `kokoros.js` | wasm-bindgen 胶水代码 |
 | `kokoros.d.ts` | TypeScript 类型声明 |
 
