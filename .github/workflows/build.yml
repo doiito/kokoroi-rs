@@ -334,6 +334,15 @@ jobs:
         with:
           tool: wasm-pack
 
+      - name: Download ONNX Runtime Web for offline WASM demo
+        run: |
+          ORT_VER="1.21.0"
+          ORT_BASE="https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VER}/dist"
+          wget -q "${ORT_BASE}/ort.min.js"                         -P static/
+          wget -q "${ORT_BASE}/ort-wasm-simd-threaded.jsep.mjs"    -P static/
+          wget -q "${ORT_BASE}/ort-wasm-simd-threaded.jsep.wasm"   -P static/
+          ls -lh static/ort*
+
       - name: Build WASM
         run: |
           wasm-pack build crates/kokoros-core \
@@ -350,7 +359,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kokoro-wasm
-          path: static/wasm-pkg/
+          path: |
+            static/wasm-pkg/
+            static/ort.min.js
+            static/ort-wasm-simd-threaded.jsep.*
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -403,6 +415,9 @@ jobs:
           cp kokoro-wasm/kokoros_bg.wasm   dist/wasm/wasm-pkg/
           cp kokoro-wasm/kokoros.js        dist/wasm/wasm-pkg/
           cp kokoro-wasm/kokoros.d.ts      dist/wasm/wasm-pkg/
+          cp kokoro-wasm/ort.min.js                         dist/wasm/ 2>/dev/null || true
+          cp kokoro-wasm/ort-wasm-simd-threaded.jsep.mjs    dist/wasm/ 2>/dev/null || true
+          cp kokoro-wasm/ort-wasm-simd-threaded.jsep.wasm   dist/wasm/ 2>/dev/null || true
           cp static/*.html dist/wasm/ 2>/dev/null || true
           tar czf dist/kokoro-wasm.tar.gz -C dist/wasm .
 
