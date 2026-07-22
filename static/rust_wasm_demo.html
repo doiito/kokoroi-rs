@@ -123,9 +123,8 @@
                 <div class="control-group">
                     <label for="modelSelect">ONNX 模型：</label>
                     <select id="modelSelect">
-                        <option value="kokoro-v1.1-zh.q8int8.onnx">q8int8 v1.1 (79MB, 推荐)</option>
-                        <option value="model_fp16.onnx">fp16 (157MB)</option>
-                        <option value="model.onnx">fp32 (325MB, 需要 WebGPU)</option>
+                        <option value="kokoro-v1.0.onnx">v1.0 fp32 (310MB, CLI 同款)</option>
+                        <option value="model_fp16.onnx">v1.0 fp16 (157MB)</option>
                     </select>
                 </div>
             </div>
@@ -291,32 +290,31 @@
                 const inputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(paddedTokens.map(BigInt)), [1, paddedTokens.length]);
                 const styleTensor = new ort.Tensor('float32', Float32Array.from(style), [1, STYLE_DIM]);
                 const modelFile = document.getElementById('modelSelect').value;
-                const isV1 = modelFile.includes('v1.1');
-                const speedTensor = isV1
+                const useKokoroV1 = modelFile === 'kokoro-v1.0.onnx';
+                const useV11 = modelFile.includes('v1.1');
+                const inputName = useKokoroV1 ? 'tokens' : 'input_ids';
+                const speedTensor = useV11
                     ? new ort.Tensor('int32', Int32Array.from([Math.round(speed * 100)]), [1])
                     : new ort.Tensor('float32', new Float32Array([speed]), [1]);
                 
                 showProgress(true, 50, '正在运行模型推理...');
-                const results = await session.run({ input_ids: inputIdsTensor, style: styleTensor, speed: speedTensor });
-                const outputName = session.outputNames[0];
+                const feeds = {};
+                feeds[inputName] = inputIdsTensor;
+                feeds['style'] = styleTensor;
+                feeds['speed'] = speedTensor;
+                const results = await session.run(feeds);
+                const outputName = useKokoroV1 ? 'audio' : session.outputNames[0];
                 let audioData = results[outputName].data;
                 
-                // Remove DC offset and normalize to prevent clipping
+                // Remove DC offset only — keep raw float32 values unchanged
                 let sum = 0;
                 for (let i = 0; i < audioData.length; i++) sum += audioData[i];
                 const mean = sum / audioData.length;
-                let maxAbs = 0;
-                for (let i = 0; i < audioData.length; i++) {
-                    audioData[i] -= mean;
-                    maxAbs = Math.max(maxAbs, Math.abs(audioData[i]));
-                }
-                if (maxAbs > 0.99) {
-                    for (let i = 0; i < audioData.length; i++) audioData[i] /= maxAbs;
-                }
+                for (let i = 0; i < audioData.length; i++) audioData[i] -= mean;
                 
                 showProgress(true, 80, '正在生成音频文件...');
                 
-                // Convert float32 audio to WAV
+                // Output as 32-bit float WAV (IEEE float, format 3) — matches reference
                 const wavBuffer = float32ToWav(audioData, SAMPLE_RATE);
                 currentAudioBlob = new Blob([wavBuffer], { type: 'audio/wav' });
                 const audioUrl = URL.createObjectURL(currentAudioBlob);
@@ -347,7 +345,7 @@
         
         function float32ToWav(samples, sampleRate) {
             const numChannels = 1;
-            const bitsPerSample = 16;
+            const bitsPerSample = 32;
             const numSamples = samples.length;
             const dataSize = numSamples * numChannels * (bitsPerSample / 8);
             const buffer = new ArrayBuffer(44 + dataSize);
@@ -360,7 +358,7 @@
             writeString(8, 'WAVE');
             writeString(12, 'fmt ');
             view.setUint32(16, 16, true);
-            view.setUint16(20, 1, true);
+            view.setUint16(20, 3, true);  // 3 = IEEE float (not 1 = PCM)
             view.setUint16(22, numChannels, true);
             view.setUint32(24, sampleRate, true);
             view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
@@ -372,10 +370,8 @@
             for (let i = 0; i < numSamples; i++) {
                 let s = samples[i];
                 if (isNaN(s) || !isFinite(s)) s = 0;
-                s = Math.max(-1, Math.min(1, s));
-                const pcm = s < 0 ? s * 32768 : s * 32767;
-                view.setInt16(offset, pcm | 0, true);
-                offset += 2;
+                view.setFloat32(offset, s, true);  // raw float32
+                offset += 4;
             }
             return buffer;
         }

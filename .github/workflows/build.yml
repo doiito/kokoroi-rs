@@ -334,14 +334,17 @@ jobs:
         with:
           tool: wasm-pack
 
-      - name: Download ONNX Runtime Web for offline WASM demo
+      - name: Download ONNX Runtime Web and model for WASM demo
         run: |
           ORT_VER="1.21.0"
           ORT_BASE="https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VER}/dist"
           wget -q "${ORT_BASE}/ort.min.js"                         -P static/
           wget -q "${ORT_BASE}/ort-wasm-simd-threaded.jsep.mjs"    -P static/
           wget -q "${ORT_BASE}/ort-wasm-simd-threaded.jsep.wasm"   -P static/
-          ls -lh static/ort*
+          # Download model for offline WASM demo
+          mkdir -p static/models/onnx
+          wget -q "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx" -O static/models/onnx/kokoro-v1.0.onnx
+          ls -lh static/ort* static/models/onnx/
 
       - name: Build WASM
         run: |
