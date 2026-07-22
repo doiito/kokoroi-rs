@@ -10,7 +10,7 @@
 - 🚀 **High-Performance Inference** — Multi-threaded pipeline architecture with parallel generation, real-time factor of 5-10x
 - 📦 **Cross-Platform Static Builds** — Fully static musl ELF for Linux (x86_64 / ARM64), MSVC binaries for Windows — zero or minimal runtime dependencies
 - 🌐 **HTTP API Server** — Built-in Axum web server with REST API and SSE streaming, includes a web demo page
-- 🌍 **Browser WASM Inference** — Compile to WASM via the `wasm` feature for in-browser TTS (oxionnx pure-Rust backend or ONNX Runtime Web)
+- 🌍 **Browser WASM Inference** — Rust WASM for G2P (phonemization) + ONNX Runtime Web for model inference, runs entirely in the browser with no server
 - 🎤 **50+ Voice Styles** — Supports Chinese, Japanese, Korean, English, French, Hindi, Italian, Portuguese, and Spanish
 - ✂️ **Smart Text Chunking** — Phoneme-limit-based chunking strategy balancing speed and naturalness
 - 📝 **Streaming Output** — SSE real-time streaming audio for low-latency web scenarios
@@ -169,7 +169,7 @@ The `kokoros-core` library provides these Cargo features:
 | `ort` | ONNX Runtime backend (pyke/ort) | ✅ |
 | `chinese` | Chinese language support (segmentation, normalization) | ✅ |
 | `cuda` | CUDA GPU inference | ❌ |
-| `wasm` | WASM browser target (oxionnx backend) | ❌ |
+| `wasm` | WASM browser target (G2P phonemization only, no ONNX inference) | ❌ |
 | `onnx` | tract-onnx pure-Rust ONNX inference | ❌ |
 | `download` | Automatic model downloading | ❌ |
 | `audio-encode` | MP3 / Opus encoding | ❌ |
@@ -184,7 +184,7 @@ This project uses GitHub Actions to automatically build binaries for all support
 | x86_64 Linux musl | ubuntu-latest | ONNX Runtime from source, fully static musl |
 | ARM64 Linux musl | ubuntu-latest | ORT cross-compiled, aarch64 musl static |
 | x86_64 Windows MSVC | windows-latest | Pre-built ORT download, MSVC dynamic link |
-| WASM32 browser | ubuntu-latest | wasm-pack, oxionnx pure Rust inference (no ORT needed) |
+| WASM32 browser | ubuntu-latest | wasm-pack, WASM G2P + ONNX Runtime Web (loaded at runtime) |
 
 For Linux musl targets, the first ORT build takes ~20–30 min (cmake from source); subsequent runs hit the cache and complete in ~2–5 min.
 
@@ -306,11 +306,13 @@ Output goes to `static/wasm-pkg/`:
 
 | File | Description |
 |------|-------------|
-| `kokoros_bg.wasm` | WASM binary (~6MB, includes jieba segmentation dictionary) |
+| `kokoros_bg.wasm` | WASM binary (~1.6MB, G2P phonemization only, no ONNX inference) |
 | `kokoros.js` | wasm-bindgen glue code |
 | `kokoros.d.ts` | TypeScript declarations |
 
-Test in a browser via `wasm_demo.html`, `browser_demo.html`, or `rust_wasm_demo.html` in the `static/` directory.
+Test in a browser via `rust_wasm_demo.html` in the `static/` directory.
+
+> **Architecture**: The WASM binary handles G2P only (Chinese segmentation, pinyin conversion, phonemization). ONNX model inference uses [ONNX Runtime Web](https://github.com/microsoft/onnxruntime-web) (CDN: `onnxruntime-web@1.21.0`), loaded and executed in JavaScript. Model files (`*.onnx`, `voices.json`, `*.bin`) must be downloaded separately — see FAQ.
 
 ### Python Scripts
 
