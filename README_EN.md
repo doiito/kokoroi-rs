@@ -46,6 +46,21 @@ Model files can be obtained from:
 
 ### Using the CLI
 
+Full CLI options:
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-t, --text` | Input text | — |
+| `-i, --input` | Input file | — |
+| `-o, --output` | Output file | `output.wav` |
+| `-l, --lan` | Language code | `zh` |
+| `-s, --style` | Voice style | `zm_yunyang` |
+| `-p, --speed` | Speed multiplier | `0.7` |
+| `-n, --threads` | Inference threads | `2` |
+| `--max-chars` | Max chars per chunk | `150` |
+| `--max-phonemes` | Max phonemes per chunk | `510` |
+| `-P, --play` | Play audio (needs aplay/ffplay) | — |
+
 ```bash
 # Basic: generate speech from text
 ./koko --text "Hello, welcome to Kokoro TTS system." -o output.wav
@@ -53,7 +68,7 @@ Model files can be obtained from:
 # Read from file
 ./koko -i input.txt -o output.wav
 
-# Specify voice style (default: zm_yunyang)
+# Specify voice style
 ./koko --text "Nice weather today" --style af_bella -o output.wav
 
 # Adjust speech speed
@@ -65,6 +80,9 @@ Model files can be obtained from:
 # Play audio (requires aplay or ffplay)
 ./koko --text "Playback test" --play
 ```
+
+> **Auto-download models**: If `--model` or `--data` files are missing, `koko` will automatically download them.
+> First run downloads `models/kokoro-v1.0.onnx` (~325MB) and `data/voices-v1.0.bin` (~150MB).
 
 On Windows, replace `./koko` with `koko.exe`.
 
@@ -166,6 +184,7 @@ This project uses GitHub Actions to automatically build binaries for all support
 | x86_64 Linux musl | ubuntu-latest | ONNX Runtime from source, fully static musl |
 | ARM64 Linux musl | ubuntu-latest | ORT cross-compiled, aarch64 musl static |
 | x86_64 Windows MSVC | windows-latest | Pre-built ORT download, MSVC dynamic link |
+| WASM32 browser | ubuntu-latest | wasm-pack, oxionnx pure Rust inference (no ORT needed) |
 
 For Linux musl targets, the first ORT build takes ~20–30 min (cmake from source); subsequent runs hit the cache and complete in ~2–5 min.
 

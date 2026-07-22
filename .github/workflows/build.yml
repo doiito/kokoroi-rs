@@ -390,7 +390,7 @@ jobs:
           cp kokoro-wasm/kokoros_bg.wasm   dist/wasm/
           cp kokoro-wasm/kokoros.js        dist/wasm/
           cp kokoro-wasm/kokoros.d.ts      dist/wasm/
-          cp -r ../static/*.html dist/wasm/ 2>/dev/null || true
+          cp static/*.html dist/wasm/ 2>/dev/null || true
           tar czf dist/kokoro-wasm.tar.gz -C dist/wasm .
 
           echo "--- Release artifacts ---"
@@ -409,28 +409,14 @@ jobs:
             ### Windows
             - `kokoro-x86_64-pc-windows-msvc.zip` — x86_64, requires onnxruntime.dll (included)
 
-            ### Contents (per archive)
-            - `koko` / `koko.exe` — CLI text-to-speech tool
-            - `kokoros-server` / `kokoros-server.exe` — HTTP API server
-            - `onnxruntime.dll` — (Windows only) ONNX Runtime shared library
-            - `README.md` — usage documentation
-            - `config.toml` — default server config
-
             ### WASM (browser)
             - `kokoro-wasm.tar.gz` — WASM browser package, zero server needed
-
-            ### Contents (per archive)
-            - `koko` / `koko.exe` — CLI text-to-speech tool
-            - `kokoros-server` / `kokoros-server.exe` — HTTP API server
-            - `onnxruntime.dll` — (Windows only) ONNX Runtime shared library
-            - `README.md` — usage documentation
-            - `config.toml` — default server config
 
             ### WASM archive contents
             - `kokoros_bg.wasm` — WASM binary (~6MB, jieba-rs + oxionnx)
             - `kokoros.js` — wasm-bindgen glue code
             - `kokoros.d.ts` — TypeScript type declarations
-            - `*.html` — browser demo pages
+            - `*.html` — browser demo pages (wasm_demo.html, rust_wasm_demo.html, browser_demo.html, index.html)
 
             ### Notes
             - Linux: built with ONNX Runtime ${{ env.ORT_VERSION }} (static, CPU only, musl)

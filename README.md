@@ -46,6 +46,21 @@
 
 ### 使用 CLI
 
+完整 CLI 选项：
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `-t, --text` | 输入文本 | — |
+| `-i, --input` | 输入文件 | — |
+| `-o, --output` | 输出文件 | `output.wav` |
+| `-l, --lan` | 语言代码 | `zh` |
+| `-s, --style` | 发音人 | `zm_yunyang` |
+| `-p, --speed` | 语速倍率 | `0.7` |
+| `-n, --threads` | 推理线程数 | `2` |
+| `--max-chars` | 每块最大字符数 | `150` |
+| `--max-phonemes` | 每块最大音素数 | `510` |
+| `-P, --play` | 播放音频（需 aplay/ffplay） | — |
+
 ```bash
 # 基本用法：输入文本生成语音
 ./koko --text "你好，欢迎使用 Kokoro 语音合成系统。" -o output.wav
@@ -53,7 +68,7 @@
 # 从文件读取文本
 ./koko -i input.txt -o output.wav
 
-# 指定发音人风格（默认 zm_yunyang）
+# 指定发音人风格
 ./koko --text "今天天气真好" --style zf_xiaobei -o output.wav
 
 # 调整语速
@@ -65,6 +80,9 @@
 # 播放音频（需要 aplay 或 ffplay）
 ./koko --text "播放测试" --play
 ```
+
+> **自动下载模型**：如果 `--model` 或 `--data` 指定的文件不存在，`koko` 会自动下载缺失的模型文件。
+> 首次运行会自动下载 `models/kokoro-v1.0.onnx`（约 325MB）和 `data/voices-v1.0.bin`（约 150MB）。
 
 Windows 下使用方式相同，将 `./koko` 替换为 `koko.exe` 即可。
 
@@ -166,6 +184,7 @@ kokoros-core 库提供以下 Cargo features：
 | x86_64 Linux musl | ubuntu-latest | ONNX Runtime 源码编译，musl 全静态链接 |
 | ARM64 Linux musl | ubuntu-latest | ORT 源码交叉编译，aarch64 musl 静态链接 |
 | x86_64 Windows MSVC | windows-latest | 下载预编译 ORT，MSVC 动态链接 |
+| WASM32 browser | ubuntu-latest | wasm-pack, oxionnx 纯 Rust 推理（无需 ORT） |
 
 Linux musl 的 ORT 第一次构建约需 20–30 分钟（cmake 编译），之后缓存命中仅需 2–5 分钟。
 
