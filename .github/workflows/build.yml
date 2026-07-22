@@ -399,10 +399,10 @@ jobs:
           cd dist/win64 && zip -r ../kokoro-x86_64-pc-windows-msvc.zip . && cd ../..
 
           # -- WASM browser target --
-          mkdir -p dist/wasm
-          cp kokoro-wasm/kokoros_bg.wasm   dist/wasm/
-          cp kokoro-wasm/kokoros.js        dist/wasm/
-          cp kokoro-wasm/kokoros.d.ts      dist/wasm/
+          mkdir -p dist/wasm/wasm-pkg
+          cp kokoro-wasm/kokoros_bg.wasm   dist/wasm/wasm-pkg/
+          cp kokoro-wasm/kokoros.js        dist/wasm/wasm-pkg/
+          cp kokoro-wasm/kokoros.d.ts      dist/wasm/wasm-pkg/
           cp static/*.html dist/wasm/ 2>/dev/null || true
           tar czf dist/kokoro-wasm.tar.gz -C dist/wasm .
 
