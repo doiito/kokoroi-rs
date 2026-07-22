@@ -183,8 +183,8 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -DCMAKE_C_FLAGS="-Wno-error=unused-parameter ${ARCH_CFLAGS} -I${MUSL_STUBS_DIR}" \
     -DCMAKE_CXX_FLAGS="-Wno-error=unused-parameter ${ARCH_CFLAGS} -I${MUSL_STUBS_DIR}" \
     -Donnxruntime_DISABLE_RTTI=ON \
-    -Donnxruntime_MINIMAL_BUILD=ON \
-    -Donnxruntime_EXTENDED_MINIMAL_BUILD=ON \
+    -Donnxruntime_MINIMAL_BUILD=OFF \
+    -Donnxruntime_EXTENDED_MINIMAL_BUILD=OFF \
     -Donnxruntime_ENABLE_STACKTRACE=OFF
 
 echo ""
