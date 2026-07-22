@@ -209,7 +209,10 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          # Include ORT build script hash so Rust deps are rebuilt when ORT
+          # cmake flags change. Without this, the cache restores old ortsys
+          # artifacts linked against the stale libonnxruntime.a.
+          key: ${{ matrix.target }}-ort-${{ hashFiles('scripts/build_ort_musl.sh') }}
 
       # ===================================================================
       #  C o m p i l e
@@ -221,7 +224,13 @@ jobs:
 
       - name: Build koko (Linux)
         if: runner.os == 'Linux'
-        run: cargo build --release -p koko --target ${{ matrix.target }} --no-default-features
+        run: |
+          # Force ortsys rebuild + koko relink when ORT .a content may differ
+          # (Rust cache may restore stale artifacts linked against old ORT)
+          find target/${{ matrix.target }}/release \
+            \( -name '*ort-sys*' -o -name 'libort_sys*' -o -name 'koko' -o -name 'kokoros-server' \) \
+            -exec rm -rf {} + 2>/dev/null || true
+          cargo build --release -p koko --target ${{ matrix.target }} --no-default-features
 
       - name: Build koko (Windows)
         if: runner.os == 'Windows'
@@ -229,7 +238,11 @@ jobs:
 
       - name: Build kokoros-server (Linux)
         if: runner.os == 'Linux'
-        run: cargo build --release -p kokoros-server --target ${{ matrix.target }} --no-default-features
+        run: |
+          # ortsys already cleaned by koko step above; just ensure server is relinked
+          find target/${{ matrix.target }}/release -name 'kokoros-server' \
+            -exec rm -rf {} + 2>/dev/null || true
+          cargo build --release -p kokoros-server --target ${{ matrix.target }} --no-default-features
 
       - name: Build kokoros-server (Windows)
         if: runner.os == 'Windows'
