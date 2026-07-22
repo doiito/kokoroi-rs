@@ -186,7 +186,11 @@ impl ChineseG2P {
         }
         #[cfg(target_arch = "wasm32")]
         {
-            text.chars().map(|c| (c.to_string(), "x".to_string())).collect()
+            // Each character individually with a general POS tag ("v") so that
+            // process_bopomofo converts them to pinyin → Bopomofo instead of
+            // passing them through as raw Chinese characters. Without this,
+            // the characters won't be found in ZH_VOCAB during tokenization.
+            text.chars().map(|c| (c.to_string(), "v".to_string())).collect()
         }
     }
 
