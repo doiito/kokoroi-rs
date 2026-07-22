@@ -63,6 +63,10 @@ for tool in "$CC" "$CXX" "$AR" "$RANLIB"; do
 done
 
 BUILD_DIR="${ORT_SRC}/build-musl-${TARGET}"
+# Clean build directory to avoid stale CMakeCache.txt from cached ORT_SRC_DIR
+# (CI caches ORT_SRC_DIR between runs; old MINIMAL_BUILD=ON or other stale
+# settings would persist in CMakeCache.txt and break the build.)
+rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 mkdir -p "$INSTALL_DIR/include" "$INSTALL_DIR/lib"
 
@@ -148,6 +152,7 @@ EXECINFO_STUB
 # Minimal ORT build: CPU inference only, no backends, no python, no tests
 STUB_INCLUDE="-I${MUSL_STUBS_DIR}"
 cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
+    --compile-no-warning-as-error \
     -G "$GENERATOR" \
     -DCMAKE_TOOLCHAIN_FILE="/tmp/ort-toolchain-${TARGET//\//-}.cmake" \
     -DCMAKE_BUILD_TYPE=Release \
