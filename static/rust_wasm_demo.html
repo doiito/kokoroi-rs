@@ -123,9 +123,9 @@
                 <div class="control-group">
                     <label for="modelSelect">ONNX 模型：</label>
                     <select id="modelSelect">
-                        <option value="model_fp16.onnx">fp16 (157MB, 推荐)</option>
-                        <option value="model_int8.onnx">int8 (122MB)</option>
-                        <option value="model_q8f16.onnx">q8f16 (83MB)</option>
+                        <option value="kokoro-v1.1-zh.q8int8.onnx">q8int8 v1.1 (79MB, 推荐)</option>
+                        <option value="model_fp16.onnx">fp16 (157MB)</option>
+                        <option value="model.onnx">fp32 (325MB, 需要 WebGPU)</option>
                     </select>
                 </div>
             </div>
@@ -154,7 +154,7 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
+    <script src="ort.min.js"></script>
     <script type="module">
         import init, { KokoroWASM } from './wasm-pkg/kokoros.js';
         
@@ -290,12 +290,29 @@
                 
                 const inputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(paddedTokens.map(BigInt)), [1, paddedTokens.length]);
                 const styleTensor = new ort.Tensor('float32', Float32Array.from(style), [1, STYLE_DIM]);
-                const speedTensor = new ort.Tensor('float32', new Float32Array([speed]), [1]);
+                const modelFile = document.getElementById('modelSelect').value;
+                const isV1 = modelFile.includes('v1.1');
+                const speedTensor = isV1
+                    ? new ort.Tensor('int32', Int32Array.from([Math.round(speed * 100)]), [1])
+                    : new ort.Tensor('float32', new Float32Array([speed]), [1]);
                 
                 showProgress(true, 50, '正在运行模型推理...');
                 const results = await session.run({ input_ids: inputIdsTensor, style: styleTensor, speed: speedTensor });
                 const outputName = session.outputNames[0];
-                const audioData = results[outputName].data;
+                let audioData = results[outputName].data;
+                
+                // Remove DC offset and normalize to prevent clipping
+                let sum = 0;
+                for (let i = 0; i < audioData.length; i++) sum += audioData[i];
+                const mean = sum / audioData.length;
+                let maxAbs = 0;
+                for (let i = 0; i < audioData.length; i++) {
+                    audioData[i] -= mean;
+                    maxAbs = Math.max(maxAbs, Math.abs(audioData[i]));
+                }
+                if (maxAbs > 0.99) {
+                    for (let i = 0; i < audioData.length; i++) audioData[i] /= maxAbs;
+                }
                 
                 showProgress(true, 80, '正在生成音频文件...');
                 
