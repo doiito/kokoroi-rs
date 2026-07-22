@@ -178,7 +178,7 @@ cmake -S "$ORT_SRC/cmake" -B "$BUILD_DIR" \
     -Donnxruntime_USE_BLAS=OFF \
     -Donnxruntime_USE_MPI=OFF \
     -Donnxruntime_USE_OPENMP=OFF \
-    -Donnxruntime_DISABLE_ML_OPS=ON \
+    -Donnxruntime_DISABLE_ML_OPS=OFF \
     -Donnxruntime_DISABLE_CONTRIB_OPS=OFF \
     -DCMAKE_C_FLAGS="-Wno-error=unused-parameter ${ARCH_CFLAGS} -I${MUSL_STUBS_DIR}" \
     -DCMAKE_CXX_FLAGS="-Wno-error=unused-parameter ${ARCH_CFLAGS} -I${MUSL_STUBS_DIR}" \
