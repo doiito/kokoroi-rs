@@ -415,12 +415,12 @@ jobs:
 
           # -- WASM browser target --
           mkdir -p dist/wasm/wasm-pkg
-          cp kokoro-wasm/kokoros_bg.wasm   dist/wasm/wasm-pkg/
-          cp kokoro-wasm/kokoros.js        dist/wasm/wasm-pkg/
-          cp kokoro-wasm/kokoros.d.ts      dist/wasm/wasm-pkg/
-          cp kokoro-wasm/ort.min.js                         dist/wasm/ 2>/dev/null || true
-          cp kokoro-wasm/ort-wasm-simd-threaded.jsep.mjs    dist/wasm/ 2>/dev/null || true
-          cp kokoro-wasm/ort-wasm-simd-threaded.jsep.wasm   dist/wasm/ 2>/dev/null || true
+          cp -r kokoro-wasm/static/wasm-pkg/kokoros_bg.wasm   dist/wasm/wasm-pkg/
+          cp -r kokoro-wasm/static/wasm-pkg/kokoros.js        dist/wasm/wasm-pkg/
+          cp -r kokoro-wasm/static/wasm-pkg/kokoros.d.ts      dist/wasm/wasm-pkg/
+          cp -r kokoro-wasm/static/ort.min.js                         dist/wasm/ 2>/dev/null || true
+          cp -r kokoro-wasm/static/ort-wasm-simd-threaded.jsep.mjs    dist/wasm/ 2>/dev/null || true
+          cp -r kokoro-wasm/static/ort-wasm-simd-threaded.jsep.wasm   dist/wasm/ 2>/dev/null || true
           cp static/*.html dist/wasm/ 2>/dev/null || true
           tar czf dist/kokoro-wasm.tar.gz -C dist/wasm .
 
