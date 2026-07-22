@@ -10,6 +10,7 @@ use std::collections::HashSet;
 pub use transcription::ZH_MAP;
 pub use polyphonic::PolyphonicDisambiguator;
 
+#[cfg(not(target_arch = "wasm32"))]
 lazy_static::lazy_static! {
     static ref JIEBA: std::sync::Mutex<jieba_rs::Jieba> = std::sync::Mutex::new(jieba_rs::Jieba::new());
 }
@@ -158,21 +159,35 @@ impl ChineseG2P {
     }
 
     fn segment(text: &str) -> Vec<String> {
-        let jieba = JIEBA.lock().unwrap();
-        jieba
-            .cut(text, false)
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let jieba = JIEBA.lock().unwrap();
+            return jieba
+                .cut(text, false)
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect();
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            text.chars().map(|c| c.to_string()).collect()
+        }
     }
 
     fn segment_with_pos(text: &str) -> Vec<(String, String)> {
-        let jieba = JIEBA.lock().unwrap();
-        jieba
-            .tag(text, false)
-            .into_iter()
-            .map(|t| (t.word.to_string(), t.tag.to_string()))
-            .collect()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let jieba = JIEBA.lock().unwrap();
+            return jieba
+                .tag(text, false)
+                .into_iter()
+                .map(|t| (t.word.to_string(), t.tag.to_string()))
+                .collect();
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            text.chars().map(|c| (c.to_string(), "x".to_string())).collect()
+        }
     }
 
     fn word_to_pinyin(word: &str) -> Vec<String> {
