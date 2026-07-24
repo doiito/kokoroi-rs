@@ -205,6 +205,7 @@
         let totalChunks = 0;
         let nextExpectedChunk = 0;
         let pendingChunks = new Map();
+        let allPcmChunks = [];
         
         function updateStatus(text, className) {
             const bar = document.getElementById('statusBar');
@@ -293,7 +294,40 @@
         }
         
         function synthesizeChunkComplete() {
-            // Called when all chunks are done - update UI
+            // Called when all chunks are done - build final WAV
+        }
+
+        function buildWavBlob(pcmData) {
+            // pcmData is concatenated Int16Array of all chunks
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const sampleRate = SAMPLE_RATE;
+            const numSamples = pcmData.length;
+            const dataSize = numSamples * numChannels * (bitsPerSample / 8);
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+            function writeString(offset, str) {
+                for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+            }
+            writeString(0, 'RIFF');
+            view.setUint32(4, 36 + dataSize, true);
+            writeString(8, 'WAVE');
+            writeString(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);  // 1 = PCM
+            view.setUint16(22, numChannels, true);
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+            view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+            view.setUint16(34, bitsPerSample, true);
+            writeString(36, 'data');
+            view.setUint32(40, dataSize, true);
+            let offset = 44;
+            for (let i = 0; i < numSamples; i++) {
+                view.setInt16(offset, pcmData[i], true);
+                offset += 2;
+            }
+            return new Blob([buffer], { type: 'audio/wav' });
         }
         
         async function synthesize() {
@@ -311,6 +345,7 @@
             audioQueue = [];
             isPlaying = false;
             totalChunks = 0;
+            allPcmChunks = [];
             document.getElementById('chunkStatus').innerHTML = '';
             
             showProgress(true, 0, '正在连接服务器...');
@@ -360,16 +395,36 @@
                                     console.log('PCM data size:', pcmData.length);
                                     updateChunkStatus(data.chunk_index, 'done', totalChunks);
                                     queueChunk(data.chunk_index, pcmData);
+                                    // Store ordered by index for final WAV
+                                    allPcmChunks[data.chunk_index] = pcmData;
                                 } else if (data.total_duration !== undefined) {
                                     console.log('Complete, duration:', data.total_duration);
                                     totalDuration = data.total_duration;
                                     showProgress(true, 100, '完成！');
-                                    
+
+                                    // Build complete WAV from all PCM chunks
+                                    const totalLen = allPcmChunks.reduce((s, c) => s + c.length, 0);
+                                    const fullPcm = new Int16Array(totalLen / 2);
+                                    let off = 0;
+                                    for (const chunk of allPcmChunks) {
+                                        for (let i = 0; i < chunk.length; i += 2) {
+                                            const sample = (chunk[i+1] << 8) | chunk[i];
+                                            fullPcm[off++] = sample > 32767 ? sample - 65536 : sample;
+                                        }
+                                    }
+                                    const wavBlob = buildWavBlob(fullPcm);
+                                    const audioUrl = URL.createObjectURL(wavBlob);
+                                    const audioPlayer = document.getElementById('audioPlayer');
+                                    audioPlayer.src = audioUrl;
+                                    audioPlayer.play();
+
                                     document.getElementById('infoBox').innerHTML = `
                                         <p><strong>原文：</strong>${text.substring(0, 100)}${text.length > 100 ? '...' : ''}</p>
                                         <p><strong>分段数：</strong>${totalChunks}</p>
                                         <p><strong>采样率：</strong>${SAMPLE_RATE} Hz</p>
                                         <p><strong>音频时长：</strong>${totalDuration.toFixed(2)} 秒</p>
+                                        <p><strong>文件大小：</strong>${(wavBlob.size / 1024).toFixed(0)} KB</p>
+                                        <p><a id="downloadLink" href="${audioUrl}" download="kokoro_tts.wav" style="color:#667eea;">⬇ 下载 WAV 文件</a></p>
                                     `;
                                      
                                      synthesizeChunkComplete();

@@ -1,5 +1,5 @@
 use crate::tts::chinese::ChineseG2P;
-use crate::tts::vocab::ZH_VOCAB;
+use crate::tts::vocab::MODEL_VOCAB;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -63,6 +63,7 @@ fn convert_tokens_to_bopomofo(tokens: &str) -> String {
 
 #[wasm_bindgen]
 pub struct KokoroWASM {
+    #[allow(dead_code)]
     chinese_g2p: ChineseG2P,
     chinese_g2p_ipa: ChineseG2P,
     #[cfg(feature = "oxionnx")]
@@ -113,7 +114,8 @@ impl KokoroWASM {
         let language = lang.unwrap_or_else(|| "zh".to_string());
 
         if language == "zh" || language == "zh-CN" || language == "zh-TW" {
-            Ok(self.chinese_g2p.process(text))
+            // Use IPA mode for compatibility with the public kokoro-v1.0.onnx model
+            Ok(self.chinese_g2p_ipa.process(text))
         } else {
             Ok(text.to_string())
         }
@@ -136,22 +138,44 @@ impl KokoroWASM {
         Ok(convert_tokens_to_bopomofo(&tokens))
     }
 
+    #[wasm_bindgen(js_name = phonemizeBopomofo)]
+    pub fn phonemize_bopomofo(&self, text: &str, lang: Option<String>) -> Result<String, JsValue> {
+        let language = lang.unwrap_or_else(|| "zh".to_string());
+
+        if language == "zh" || language == "zh-CN" || language == "zh-TW" {
+            Ok(self.chinese_g2p.process(text))
+        } else {
+            Ok(text.to_string())
+        }
+    }
+
+    #[wasm_bindgen(js_name = tokenizeV11)]
+    pub fn tokenize_v11(&self, phonemes: &str) -> Result<Vec<u32>, JsValue> {
+        use crate::tts::vocab::ZH_VOCAB;
+        let tokens: Vec<u32> = phonemes
+            .chars()
+            .filter_map(|c| ZH_VOCAB.get(&c))
+            .map(|&idx| idx as u32)
+            .collect();
+        Ok(tokens)
+    }
+
     #[wasm_bindgen(js_name = tokenize)]
     pub fn tokenize_phonemes(&self, phonemes: &str, lang: Option<String>) -> Result<Vec<u32>, JsValue> {
         let language = lang.unwrap_or_else(|| "zh".to_string());
 
         let tokens: Vec<u32> = if language == "zh" || language == "zh-CN" || language == "zh-TW" {
+            // Use MODEL_VOCAB for compatibility with the public kokoro-v1.0.onnx model
             phonemes
                 .chars()
-                .filter_map(|c| ZH_VOCAB.get(&c))
+                .filter_map(|c| MODEL_VOCAB.get(&c))
                 .map(|&idx| idx as u32)
                 .collect()
         } else {
             phonemes
                 .chars()
-                .enumerate()
-                .filter_map(|(i, _)| Some(i as u32))
-                .take(phonemes.len())
+                .filter_map(|c| MODEL_VOCAB.get(&c))
+                .map(|&idx| idx as u32)
                 .collect()
         };
 
@@ -189,12 +213,12 @@ impl KokoroWASM {
         let model = self.model.as_ref()
             .ok_or_else(|| JsValue::from_str("Model not loaded. Call loadModel() first."))?;
 
-        let phonemes = self.chinese_g2p.process(text);
+        let phonemes = self.chinese_g2p_ipa.process(text);
         let phonemes_display = convert_tokens_to_bopomofo(&phonemes);
         
         let tokens: Vec<i64> = phonemes
             .chars()
-            .filter_map(|c| ZH_VOCAB.get(&c))
+            .filter_map(|c| MODEL_VOCAB.get(&c))
             .map(|&idx| idx as i64)
             .collect();
 
@@ -254,7 +278,7 @@ impl KokoroWASM {
 
         let tokens: Vec<i64> = phonemes
             .chars()
-            .filter_map(|c| ZH_VOCAB.get(&c))
+            .filter_map(|c| MODEL_VOCAB.get(&c))
             .map(|&idx| idx as i64)
             .collect();
 

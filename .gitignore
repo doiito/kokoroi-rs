@@ -14,8 +14,18 @@ dist/
 tmp/
 *.wav
 *.mp3
+
+# ONNX model files — track S/M in repo (under 100MB), exclude L (311MB, too large)
 *.onnx
+!models/kokoro-v1.1-zh-s.onnx
+!models/kokoro-v1.1-zh-m.onnx
+!static/models/onnx/kokoro-v1.1-zh-s.onnx
+!static/models/onnx/kokoro-v1.1-zh-m.onnx
+
+# Binary voice/style data — track specific voice files for WASM demo
 *.bin
+!static/models/voices/*.bin
+!data/*.bin
 
 # WASM
 static/wasm-pkg/

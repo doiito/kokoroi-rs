@@ -18,12 +18,12 @@ lazy_static! {
         m.insert("j", "ʨ");
         m.insert("q", "ʨʰ");
         m.insert("x", "ɕ");
-        m.insert("zh", "ʈʂ");
-        m.insert("ch", "ʈʂʰ");
+        m.insert("zh", "ꭧ");
+        m.insert("ch", "ꭧʰ");
         m.insert("sh", "ʂ");
         m.insert("r", "ɻ");
-        m.insert("z", "ts");
-        m.insert("c", "tsʰ");
+        m.insert("z", "ʦ");
+        m.insert("c", "ʦʰ");
         m.insert("s", "s");
         m
     };
@@ -70,8 +70,8 @@ lazy_static! {
         m.insert("ve", "ɥe");
         m.insert("van", "ɥɛn");
         m.insert("vn", "yn");
-        m.insert("ii", "ɻ̩");
-        m.insert("iii", "ɹ̩");
+        m.insert("ii", "ɨ");
+        m.insert("iii", "ɨ");
         m
     };
 
@@ -322,15 +322,16 @@ mod tests {
     fn test_pinyin_to_bopomofo() {
         let result = pinyin_to_bopomofo("zhong1");
         assert!(result.contains("ㄓ"), "Should contain ㄓ, got: {}", result);
-        assert!(result.contains("ㄨㄥ"), "Should contain ㄨㄥ, got: {}", result);
+        // v1.1 bopomofo uses Chinese characters for finals (中=ong)
+        assert!(result.contains("中"), "Should contain 中, got: {}", result);
 
         let result = pinyin_to_bopomofo("ni3");
         assert!(result.contains("ㄋ"), "Should contain ㄋ, got: {}", result);
         assert!(result.contains("ㄧ"), "Should contain ㄧ, got: {}", result);
 
         let result = pinyin_to_bopomofo("yin2");
-        assert!(result.contains("ㄧ"), "Should contain ㄧ, got: {}", result);
-        assert!(result.contains("ㄣ"), "Should contain ㄣ, got: {}", result);
+        // v1.1 bopomofo uses Chinese characters for finals (阴=-in)
+        assert!(result.contains("阴"), "Should contain 阴, got: {}", result);
 
         let result = pinyin_to_bopomofo("de5");
         assert!(result.contains("ㄉ"), "Should contain ㄉ, got: {}", result);

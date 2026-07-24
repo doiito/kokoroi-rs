@@ -158,22 +158,6 @@ impl ChineseG2P {
         result
     }
 
-    fn segment(text: &str) -> Vec<String> {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let jieba = JIEBA.lock().unwrap();
-            return jieba
-                .cut(text, false)
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect();
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            text.chars().map(|c| c.to_string()).collect()
-        }
-    }
-
     fn segment_with_pos(text: &str) -> Vec<(String, String)> {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -186,10 +170,6 @@ impl ChineseG2P {
         }
         #[cfg(target_arch = "wasm32")]
         {
-            // Each character individually with a general POS tag ("v") so that
-            // process_bopomofo converts them to pinyin → Bopomofo instead of
-            // passing them through as raw Chinese characters. Without this,
-            // the characters won't be found in ZH_VOCAB during tokenization.
             text.chars().map(|c| (c.to_string(), "v".to_string())).collect()
         }
     }
@@ -237,14 +217,7 @@ impl ChineseG2P {
             .join("")
     }
 
-    fn word_to_ipa(&self, word: &str) -> String {
-        let pinyins = Self::word_to_pinyin(word);
-        pinyins
-            .iter()
-            .map(|py| transcription::pinyin_to_ipa(py))
-            .collect::<Vec<_>>()
-            .join("")
-    }
+    
 
     fn is_chinese_char(c: char) -> bool {
         ('\u{4E00}'..='\u{9FFF}').contains(&c)
@@ -320,8 +293,29 @@ impl ChineseG2P {
             let is_chinese = Self::is_chinese_char(first_char);
 
             if is_chinese {
-                let words = Self::segment(segment);
-                let ipa_parts: Vec<String> = words.iter().map(|w| self.word_to_ipa(w)).collect();
+                let words_with_pos = Self::segment_with_pos(segment);
+                let merged = tone_sandhi::pre_merge_for_modify(&words_with_pos);
+
+                let mut char_offset = 0;
+                let mut ipa_parts = Vec::new();
+
+                for (word, pos) in &merged {
+                    if pos == "x" || pos == "eng" {
+                        ipa_parts.push(word.clone());
+                        char_offset += word.chars().count();
+                        continue;
+                    }
+
+                    let pinyins = self.word_to_pinyin_with_disambiguation(word, segment, char_offset);
+                    let modified_pinyins = tone_sandhi::apply_tone_sandhi(word, pos, &pinyins);
+                    let ipa: String = modified_pinyins
+                        .iter()
+                        .map(|py| transcription::pinyin_to_ipa(py))
+                        .collect();
+                    ipa_parts.push(ipa);
+                    char_offset += word.chars().count();
+                }
+
                 result.push_str(&ipa_parts.join(" "));
             } else {
                 result.push_str(segment);

@@ -35,14 +35,24 @@ Download the binary for your platform from the [Releases](https://github.com/doi
 
 You need the following model files:
 
-- **Kokoro ONNX Model**: `models/kokoro-v1.0.onnx` (~80MB)
-- **Voice Data**: `data/voices-v1.0.bin` (~150MB)
+- **Kokoro v1.1-zh ONNX Model**: `models/kokoro-v1.1-zh-m.onnx` (~79MB, int8 quantized, recommended)
+- **Voice Data**: `data/voices-v1.0.bin` (~27MB)
 - **Configuration**: `config.toml` (provided in project root)
+
+Three v1.1-zh model variants are available (in `models/`):
+
+| Model | Size | Precision | Notes |
+|-------|------|-----------|-------|
+| `kokoro-v1.1-zh-s.onnx` | 47MB | int4 | Smallest, for quick downloads and low-memory |
+| `kokoro-v1.1-zh-m.onnx` | 79MB | int8 | **Default**, balanced size and quality |
+| `kokoro-v1.1-zh-l.onnx` | 311MB | fp32 | Full precision, best quality |
 
 Model files can be obtained from:
 
-1. The [Kokoro official project](https://github.com/hexgrad/kokoro)
+1. This project's [Releases](https://github.com/doiito/kokoroi-rs/releases) page
 2. Run `./scripts/download_all.sh`
+
+> **G2P Architecture Change**: v1.1-zh models use **Bopomofo phonemes** instead of traditional IPA. Chinese text is processed through jieba segmentation → pinyin (with polyphonic disambiguation) → tone sandhi → Bopomofo → ZH_VOCAB tokenization → ONNX inference. This produces more natural Chinese pronunciation compared to the IPA-based approach.
 
 ### Using the CLI
 
@@ -52,6 +62,8 @@ Full CLI options:
 |--------|-------------|---------|
 | `-t, --text` | Input text | — |
 | `-i, --input` | Input file | — |
+| `-m, --model` | ONNX model path | `models/kokoro-v1.1-zh-m.onnx` |
+| `-d, --data` | Voice data path | `data/voices-v1.0.bin` |
 | `-o, --output` | Output file | `output.wav` |
 | `-l, --lan` | Language code | `zh` |
 | `-s, --style` | Voice style | `zm_yunyang` |
@@ -63,26 +75,29 @@ Full CLI options:
 
 ```bash
 # Basic: generate speech from text
-./koko --text "Hello, welcome to Kokoro TTS system." -o output.wav
+./koko --text "你好，欢迎使用 Kokoro 语音合成系统。" -o output.wav
 
 # Read from file
 ./koko -i input.txt -o output.wav
 
 # Specify voice style
-./koko --text "Nice weather today" --style af_bella -o output.wav
+./koko --text "今天天气真好" --style zf_xiaobei -o output.wav
+
+# Select model (use fp32 full precision)
+./koko --text "大家好" --model models/kokoro-v1.1-zh-l.onnx -o output.wav
 
 # Adjust speech speed
-./koko --text "Hello everyone" --speed 1.2 -o output.wav
+./koko --text "大家好" --speed 1.2 -o output.wav
 
 # Set inference threads
-./koko --text "Long text test" --threads 4 -o output.wav
+./koko --text "长文本测试" --threads 4 -o output.wav
 
 # Play audio (requires aplay or ffplay)
-./koko --text "Playback test" --play
+./koko --text "播放测试" --play
 ```
 
 > **Auto-download models**: If `--model` or `--data` files are missing, `koko` will automatically download them.
-> First run downloads `models/kokoro-v1.0.onnx` (~325MB) and `data/voices-v1.0.bin` (~150MB).
+> First run downloads `models/kokoro-v1.1-zh-m.onnx` (~79MB) and `data/voices-v1.0.bin` (~27MB).
 
 On Windows, replace `./koko` with `koko.exe`.
 
@@ -102,11 +117,11 @@ The server listens on `0.0.0.0:3000` by default — open your browser to access 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Web demo page |
+| `GET` | `/` | Web demo page (SSE streaming + WAV download) |
 | `GET` | `/health` | Health check |
 | `GET` | `/voices` | List all available voices |
-| `POST` | `/tts` | Text-to-speech (returns WAV Base64) |
-| `POST` | `/tts/stream` | Streaming TTS (SSE) |
+| `POST` | `/tts` | Text-to-speech (returns JSON + Base64 WAV) |
+| `POST` | `/tts/stream` | Streaming TTS (SSE, play-as-you-go) |
 
 **POST `/tts` Request:**
 
@@ -154,8 +169,8 @@ host = "0.0.0.0"           # Listen address
 port = 3000                # Listen port
 threads = 4                # Inference threads
 max_chars = 400            # Max characters per request
-model_path = "models/kokoro-v1.0.onnx"   # Model path
-voices_path = "data/voices-v1.0.bin"     # Voice data path
+model_path = "models/kokoro-v1.1-zh-m.onnx"   # v1.1-zh model path
+voices_path = "data/voices-v1.0.bin"          # Voice data path
 ```
 
 Set the `KOKOROS_CONFIG` environment variable to use a custom config file.
@@ -409,9 +424,11 @@ Make sure `onnxruntime.dll` is in the same directory as `koko.exe` / `kokoros-se
 
 ### Q: WASM demo pages don't load
 
-WASM demo pages require additional model data files placed under `static/` (not included in the repository):
+WASM demo pages require additional model data files placed under `static/` (not included in the repository, download from [Releases](https://github.com/doiito/kokoroi-rs/releases)):
 
-- `models/onnx/model_fp16.onnx` — ONNX model file
+- `models/onnx/kokoro-v1.1-zh-m.onnx` — v1.1-zh ONNX model (int8, 79MB, recommended)
+- `models/voices/voices.json` — Voice configuration
+- `models/voices/*.bin` — Voice style embeddings
 - `models/voices/voices.json` — Voice configuration
 - `models/voices/*.bin` — Voice style embedding data
 

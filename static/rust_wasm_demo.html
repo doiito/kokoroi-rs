@@ -123,9 +123,9 @@
                 <div class="control-group">
                     <label for="modelSelect">ONNX 模型：</label>
                     <select id="modelSelect">
-                        <option value="kokoro-v1.0.onnx">v1.0 fp32 (310MB, 公开)</option>
-                        <option value="kokoro-v1.0.int8.onnx">v1.0 int8 (88MB)</option>
-                        <option value="kokoro-v1.0.fp16.onnx">v1.0 fp16 (169MB)</option>
+                        <option value="kokoro-v1.1-zh-m.onnx">v1.1-zh M (int8, ~79MB)</option>
+                        <option value="kokoro-v1.1-zh-s.onnx">v1.1-zh S (int4, ~47MB)</option>
+                        <option value="kokoro-v1.1-zh-l.onnx">v1.1-zh L (fp32, ~311MB)</option>
                     </select>
                 </div>
             </div>
@@ -226,6 +226,27 @@
             }
         }
         
+        async function loadModel(selectedModel) {
+            updateStatus(`正在加载 ONNX 模型 (${selectedModel})...`, 'loading');
+            showProgress(true, 10, '正在下载模型...');
+            try {
+                const modelUrl = `${MODEL_DIR}/${selectedModel}`;
+                const newSession = await ort.InferenceSession.create(modelUrl, {
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all'
+                });
+                session = newSession;
+                showProgress(true, 100, '模型加载完成！');
+                updateStatus('模型已就绪，可以开始合成', 'ready');
+                document.getElementById('synthesizeBtn').disabled = false;
+                setTimeout(() => showProgress(false), 500);
+            } catch (error) {
+                console.error('Failed to load model:', error);
+                updateStatus(`模型加载失败: ${error.message}`, 'error');
+                showProgress(false);
+            }
+        }
+
         async function initApp() {
             try {
                 updateStatus('正在加载 WASM G2P 模块...', 'loading');
@@ -235,21 +256,8 @@
                 
                 await loadVoices();
                 
-                // Load ONNX model via ORT Web
                 const modelFile = document.getElementById('modelSelect').value;
-                updateStatus(`正在加载 ONNX 模型 (${modelFile})...`, 'loading');
-                showProgress(true, 10, '正在下载模型...');
-                
-                const modelUrl = `${MODEL_DIR}/${modelFile}`;
-                session = await ort.InferenceSession.create(modelUrl, {
-                    executionProviders: ['wasm'],
-                    graphOptimizationLevel: 'all'
-                });
-                
-                showProgress(true, 100, '模型加载完成！');
-                updateStatus('模型已就绪，可以开始合成', 'ready');
-                document.getElementById('synthesizeBtn').disabled = false;
-                setTimeout(() => showProgress(false), 500);
+                await loadModel(modelFile);
                 
             } catch (error) {
                 console.error('Failed to initialize:', error);
@@ -257,6 +265,11 @@
                 showProgress(false);
             }
         }
+        
+        document.getElementById('modelSelect').addEventListener('change', async (e) => {
+            document.getElementById('synthesizeBtn').disabled = true;
+            await loadModel(e.target.value);
+        });
         
         async function synthesize() {
             const text = document.getElementById('inputText').value.trim();
@@ -275,8 +288,8 @@
                 const styleData = await loadVoiceStyle(voiceId);
                 
                 showProgress(true, 15, '正在进行音素化处理...');
-                const phonemes = kokoroG2P.phonemize(text, 'zh');
-                const tokenIds = kokoroG2P.tokenize(phonemes, 'zh');
+                const phonemes = kokoroG2P.phonemizeBopomofo(text, 'zh');
+                const tokenIds = kokoroG2P.tokenizeV11(phonemes);
                 let tokens = Array.from(tokenIds);
                 const MAX_TOKENS = 508;
                 if (tokens.length > MAX_TOKENS) tokens = tokens.slice(0, MAX_TOKENS);
@@ -290,22 +303,16 @@
                 
                 const inputIdsTensor = new ort.Tensor('int64', BigInt64Array.from(paddedTokens.map(BigInt)), [1, paddedTokens.length]);
                 const styleTensor = new ort.Tensor('float32', Float32Array.from(style), [1, STYLE_DIM]);
-                const modelFile = document.getElementById('modelSelect').value;
-                const useKokoroV1 = modelFile === 'kokoro-v1.0.onnx';
-                const useV11 = modelFile.includes('v1.1');
-                const inputName = useKokoroV1 ? 'tokens' : 'input_ids';
-                const speedTensor = useV11
-                    ? new ort.Tensor('int32', Int32Array.from([Math.round(speed * 100)]), [1])
-                    : new ort.Tensor('float32', new Float32Array([speed]), [1]);
+                const speedTensor = new ort.Tensor('float32', new Float32Array([speed]), [1]);
                 
                 showProgress(true, 50, '正在运行模型推理...');
-                const feeds = {};
-                feeds[inputName] = inputIdsTensor;
-                feeds['style'] = styleTensor;
-                feeds['speed'] = speedTensor;
+                const feeds = {
+                    input_ids: inputIdsTensor,
+                    style: styleTensor,
+                    speed: speedTensor
+                };
                 const results = await session.run(feeds);
-                const outputName = useKokoroV1 ? 'audio' : session.outputNames[0];
-                let audioData = results[outputName].data;
+                let audioData = results['waveform'].data;
                 
                 // Remove DC offset only — keep raw float32 values unchanged
                 let sum = 0;

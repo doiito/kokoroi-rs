@@ -6,11 +6,11 @@
 
 ## 特性
 
-- 🎯 **高质量中文语音合成** — 基于 Kokoro 模型，支持多种中文发音人
+- 🎯 **高质量中文语音合成** — 基于 Kokoro v1.1-zh 微调模型，使用 **Bopomofo（注音符号）音素** 替代传统 IPA，支持多音字消歧和变调处理
 - 🚀 **高性能推理** — 多线程流水线架构，支持并行生成，实时率可达 5-10x
 - 📦 **多平台静态编译** — Linux 下 musl 全静态链接 (x86_64 / ARM64)，零运行时依赖；Windows 下 MSVC 编译，开箱即用
-- 🌐 **HTTP API 服务** — 内置 Axum Web 服务器，提供 REST API 和 SSE 流式接口，附带 Web 演示页面
-- 🌍 **浏览器 WASM 推理** — Rust WASM 做 G2P（音素化）+ ONNX Runtime Web 做模型推理，纯浏览器端运行，无需服务器
+- 🌐 **HTTP API 服务** — 内置 Axum Web 服务器，提供 REST API 和 SSE 流式接口，附带 Web 演示页面（支持直接播放和下载 WAV）
+- 🌍 **浏览器 WASM 推理** — Rust WASM 做 G2P（中文分词、注音转换） + ONNX Runtime Web 做模型推理，纯浏览器端运行，无需服务器
 - 🎤 **多种语音风格** — 支持 50+ 种发音人，覆盖中、日、韩、英、法等多语言
 - ✂️ **智能文本分片** — 基于音素限制的智能分片策略，兼顾生成速度与自然度
 - 📝 **流式输出** — 支持 SSE 实时流式音频输出，适用于 Web 端低延迟场景
@@ -35,14 +35,24 @@
 
 需要准备以下模型文件：
 
-- **Kokoro ONNX 模型**：`models/kokoro-v1.0.onnx`（约 80MB）
-- **发音人数据**：`data/voices-v1.0.bin`（约 150MB）
+- **Kokoro v1.1-zh ONNX 模型**：`models/kokoro-v1.1-zh-m.onnx`（约 79MB，int8 量化，推荐）
+- **发音人数据**：`data/voices-v1.0.bin`（约 27MB）
 - **配置文件**：`config.toml`（项目根目录已提供）
 
-模型文件可从以下途径获取：
+项目提供三种精度的 v1.1-zh 模型（位于 `models/` 目录）：
 
-1. 从 [Kokoro 官方项目](https://github.com/hexgrad/kokoro) 下载
+| 模型 | 大小 | 精度 | 说明 |
+|------|------|------|------|
+| `kokoro-v1.1-zh-s.onnx` | 47MB | int4 | 最小体积，适合快速下载和低内存环境 |
+| `kokoro-v1.1-zh-m.onnx` | 79MB | int8 | **默认模型**，平衡体积与质量 |
+| `kokoro-v1.1-zh-l.onnx` | 311MB | fp32 | 完整精度，质量最佳 |
+
+模型文件可通过以下途径获取：
+
+1. 从本项目的 [Releases](https://github.com/doiito/kokoroi-rs/releases) 页面下载
 2. 运行 `./scripts/download_all.sh` 自动下载
+
+> **G2P 架构变更**：v1.1-zh 模型使用 **Bopomofo（注音符号）音素** 替代传统 IPA 音素，配合 `ZH_VOCAB` 词表进行 tokenization。中文处理包括 jieba 分词、多音字消歧和变调处理，生成更自然的中文发音。
 
 ### 使用 CLI
 
@@ -52,6 +62,8 @@
 |------|------|--------|
 | `-t, --text` | 输入文本 | — |
 | `-i, --input` | 输入文件 | — |
+| `-m, --model` | ONNX 模型路径 | `models/kokoro-v1.1-zh-m.onnx` |
+| `-d, --data` | 发音人数据路径 | `data/voices-v1.0.bin` |
 | `-o, --output` | 输出文件 | `output.wav` |
 | `-l, --lan` | 语言代码 | `zh` |
 | `-s, --style` | 发音人 | `zm_yunyang` |
@@ -71,6 +83,9 @@
 # 指定发音人风格
 ./koko --text "今天天气真好" --style zf_xiaobei -o output.wav
 
+# 指定模型（使用 fp32 全精度模型）
+./koko --text "大家好" --model models/kokoro-v1.1-zh-l.onnx -o output.wav
+
 # 调整语速
 ./koko --text "大家好" --speed 1.2 -o output.wav
 
@@ -82,7 +97,7 @@
 ```
 
 > **自动下载模型**：如果 `--model` 或 `--data` 指定的文件不存在，`koko` 会自动下载缺失的模型文件。
-> 首次运行会自动下载 `models/kokoro-v1.0.onnx`（约 325MB）和 `data/voices-v1.0.bin`（约 150MB）。
+> 首次运行会自动下载 `models/kokoro-v1.1-zh-m.onnx`（约 79MB）和 `data/voices-v1.0.bin`（约 27MB）。
 
 Windows 下使用方式相同，将 `./koko` 替换为 `koko.exe` 即可。
 
@@ -102,11 +117,11 @@ KOKOROS_CONFIG=my_config.toml ./kokoros-server
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/` | Web 演示页面 |
+| `GET` | `/` | Web 演示页面（SSE 流式播放 + WAV 下载） |
 | `GET` | `/health` | 健康检查 |
 | `GET` | `/voices` | 获取所有可用发音人 |
-| `POST` | `/tts` | 文本转语音（返回 WAV Base64） |
-| `POST` | `/tts/stream` | 流式文本转语音（SSE） |
+| `POST` | `/tts` | 文本转语音（返回 JSON + Base64 WAV） |
+| `POST` | `/tts/stream` | 流式文本转语音（SSE，逐块播放） |
 
 **POST `/tts` 请求示例：**
 
@@ -154,8 +169,8 @@ host = "0.0.0.0"        # 监听地址
 port = 3000             # 监听端口
 threads = 4             # 推理线程数
 max_chars = 400         # 单次最大字符数
-model_path = "models/kokoro-v1.0.onnx"   # 模型路径
-voices_path = "data/voices-v1.0.bin"     # 发音人数据路径
+model_path = "models/kokoro-v1.1-zh-m.onnx"   # v1.1-zh 模型路径
+voices_path = "data/voices-v1.0.bin"          # 发音人数据路径
 ```
 
 也可通过环境变量 `KOKOROS_CONFIG` 指定自定义配置文件路径。
@@ -354,8 +369,23 @@ kokoroi-rs/
 ├── crates/
 │   ├── koko-cli/              # CLI 工具入口
 │   ├── kokoros-core/          # 核心 TTS 引擎（含 WASM 入口）
+│   │   └── src/
+│   │       ├── tts/
+│   │       │   ├── chinese/   # 中文 G2P（分词、拼音、注音、变调）
+│   │       │   ├── koko.rs    # TTS 引擎（tokenize + ONNX 推理）
+│   │       │   ├── phonemizer.rs  # 音素化（Bopomofo 模式）
+│   │       │   ├── tokenize.rs    # 词表 tokenization（ZH_VOCAB）
+│   │       │   └── vocab.rs       # 词表定义（ZH_VOCAB + MODEL_VOCAB）
+│   │       ├── onn/           # ONNX Runtime 推理后端
+│   │       └── wasm/          # WASM 浏览器入口
 │   ├── kokoros-server/        # HTTP API 服务器
 │   └── misaki/                # G2P（字素转音素）引擎
+├── models/                    # v1.1-zh ONNX 模型文件
+│   ├── kokoro-v1.1-zh-s.onnx  # int4 量化（47MB）
+│   ├── kokoro-v1.1-zh-m.onnx  # int8 量化（79MB，默认）
+│   └── kokoro-v1.1-zh-l.onnx  # fp32 全精度（311MB）
+├── data/                      # 模型数据
+│   └── voices-v1.0.bin        # 发音人嵌入数据（.npz 格式）
 ├── scripts/
 │   ├── build_musl.sh          # x86_64 musl 构建
 │   ├── build_aarch64_musl.sh  # ARM64 musl 构建
@@ -377,11 +407,14 @@ kokoroi-rs/
 │   ├── run_openai.py          # OpenAI API 测试客户端
 │   └── requirements.txt       # Python 依赖
 ├── static/
-│   ├── index.html             # API 服务器演示页
+│   ├── index.html             # API 服务器演示页（SSE + WAV 下载）
 │   ├── wasm_demo.html         # ONNX Runtime Web + WASM G2P 演示
 │   ├── browser_demo.html      # 流式语音合成演示
-│   ├── rust_wasm_demo.html    # WASM G2P + ONNX Runtime Web 混合演示
+│   ├── rust_wasm_demo.html    # WASM G2P + ONNX Runtime Web 混合演示（v1.1-zh S/M/L 模型）
 │   ├── kokoros.d.ts           # WASM TypeScript 类型定义
+│   ├── models/
+│   │   ├── onnx/              # 浏览器用 ONNX 模型
+│   │   └── voices/            # 发音人配置 + 风格嵌入 *.bin
 │   ├── server.py              # Python 后端服务器
 │   └── wasm-pkg/              # wasm-pack 构建产物
 │       ├── kokoros_bg.wasm
@@ -411,17 +444,34 @@ CI 流水线使用 `scripts/build_ort_musl.sh` 自动生成组合 `libonnxruntim
 
 ### Q: WASM demo 页面无法加载
 
-WASM demo 页面需要以下额外数据文件放置在 `static/` 目录下（不在代码仓库中）：
+WASM demo 页面需要以下额外数据文件放置在 `static/` 目录下（不在代码仓库中，需从 [Releases](https://github.com/doiito/kokoroi-rs/releases) 下载）：
 
-- `models/onnx/model_fp16.onnx` — ONNX 模型文件（约 157MB）
+- `models/onnx/kokoro-v1.1-zh-*.onnx` — v1.1-zh ONNX 模型文件（S/M/L 三选一）
 - `models/voices/voices.json` — 发音人配置
 - `models/voices/*.bin` — 语音风格嵌入数据
 
-参考 [Kokoro 官方项目](https://github.com/hexgrad/kokoro) 获取这些文件。
-
 ### Q: WASM demo 用的是什么推理引擎？
 
-Rust WASM 二进制（`kokoros_bg.wasm`）仅处理 G2P（中文分词、音素转换），模型推理使用 [ONNX Runtime Web](https://github.com/microsoft/onnxruntime-web) v1.21.0，通过 CDN 加载（`https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js`）。所有计算在浏览器本地完成，无需服务器。
+Rust WASM 二进制（`kokoros_bg.wasm`）仅处理 G2P（中文分词、注音转换），模型推理使用 [ONNX Runtime Web](https://github.com/microsoft/onnxruntime-web) v1.21.0，通过 CDN 加载（`https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js`）。所有计算在浏览器本地完成，无需服务器。
+
+### Q: CLI/Server 使用的是哪种 G2P 模式？
+
+v1.1-zh 模型使用 **Bopomofo（注音符号）音素** 模式：
+- 中文文本 → jieba 分词 → 拼音（含多音字消歧）→ 变调处理 → Bopomofo 注音 → ZH_VOCAB tokenization → ONNX 推理
+- 相比传统的 IPA 音素方案，Bopomofo 在中文字素映射上更精确，发音更自然
+
+### Q: 如何切换模型精度？
+
+CLI 使用 `--model` 参数：
+```bash
+./koko --text "你好" --model models/kokoro-v1.1-zh-l.onnx
+```
+
+Server 修改 `config.toml` 中的 `model_path` 后重启。
+
+### Q: 什么音频后处理？
+
+CLI 和 Server 使用简单的振幅阈值静音裁切（无 DC 偏移消除、无淡入淡出），与 Kokoros-main 参考实现行为一致。模型原始输出中的前导静音（~730ms）和尾部低噪（~1.1s）被裁切，保留约 50ms 的自然前置静音。
 
 ### Q: Windows 构建需要安装什么？
 

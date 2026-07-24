@@ -1,13 +1,16 @@
-use crate::tts::vocab::{VOCAB, ZH_VOCAB};
+use crate::tts::vocab::{MODEL_VOCAB, VOCAB, ZH_VOCAB};
 
+/// Tokenize using the public model's exact vocabulary (kokoro-v1.0.onnx).
+/// Characters not in the model's vocab are silently skipped.
 pub fn tokenize(phonemes: &str) -> Vec<i64> {
     phonemes
         .chars()
-        .filter_map(|c| ZH_VOCAB.get(&c).or_else(|| VOCAB.get(&c)))
+        .filter_map(|c| MODEL_VOCAB.get(&c))
         .map(|&idx| idx as i64)
         .collect()
 }
 
+/// Tokenize using the bopomofo ZH_VOCAB (for v1.1-zh models).
 pub fn tokenize_zh(phonemes: &str) -> Vec<i64> {
     phonemes
         .chars()
@@ -16,6 +19,7 @@ pub fn tokenize_zh(phonemes: &str) -> Vec<i64> {
         .collect()
 }
 
+/// Tokenize using the positional VOCAB (for legacy models).
 pub fn tokenize_ipa(phonemes: &str) -> Vec<i64> {
     phonemes
         .chars()
@@ -47,19 +51,20 @@ mod tests {
 
     #[test]
     fn test_tokenize_basic_chars() {
-        let text = "Hello!";
+        let text = "nil!";
         let tokens = tokenize(text);
         assert!(!tokens.is_empty());
-        assert!(tokens.len() == 6, "Hello! should have 6 tokens");
+        // n=56 i=51 l=54 !=5 = 4 tokens (all in MODEL_VOCAB)
+        assert!(tokens.len() == 4, "Expected 4 tokens, got {:?}", tokens);
     }
 }
 
-use crate::tts::vocab::REVERSE_VOCAB;
+use crate::tts::vocab::REVERSE_MODEL_VOCAB;
 
 pub fn tokens_to_phonemes(tokens: &[i64]) -> String {
     tokens
         .iter()
-        .filter_map(|&t| REVERSE_VOCAB.get(&(t as usize)))
+        .filter_map(|&t| REVERSE_MODEL_VOCAB.get(&(t as usize)))
         .collect()
 }
 
@@ -69,7 +74,8 @@ mod tests2 {
 
     #[test]
     fn test_tokens_to_phonemes_roundtrip() {
-        let text = "Hello!";
+        // Use IPA chars that are all in MODEL_VOCAB
+        let text = "nɪlɔ!";
         let tokens = tokenize(text);
         let recovered = tokens_to_phonemes(&tokens);
         assert_eq!(recovered, text);

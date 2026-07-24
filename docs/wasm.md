@@ -6,7 +6,8 @@ Kokoro TTS 的 WASM（WebAssembly）模块将核心 TTS 引擎编译为 `wasm32-
 
 WASM 模块包含两个核心能力：
 
-- **G2P（字素转音素）引擎** — 将中文文本转换为 Bopomofo（注音符号）音素序列
+- **G2P（字素转音素）引擎** — 将中文文本转换为 Bopomofo（注音符号）音素序列（含多音字消歧 + 变调处理）
+- **音素 Tokenization** — 使用 `ZH_VOCAB` 词表进行字符级 tokenization
 - **ONNX 推理引擎** — 将音素序列 + 语音风格嵌入 → PCM 音频采样
 
 支持两种推理后端：
@@ -139,13 +140,15 @@ const kokoro = new KokoroWASM({
 | 方法 | 参数 | 返回值 | 说明 |
 |------|------|--------|------|
 | `constructor(config)` | `{ usePolyphonic?: boolean }` | `KokoroWASM` | 创建实例 |
-| `phonemize(text, lang?)` | `text: string`, `lang?: string` | `Promise<string>` | 中文文本 → Bopomofo 音素 |
+| `phonemize(text, lang?)` | `text: string`, `lang?: string` | `Promise<string>` | 中文文本 → Bopomofo 音素（IPA 模式） |
 | `phonemizeIPA(text, lang?)` | `text: string`, `lang?: string` | `Promise<string>` | 中文文本 → IPA 音素 |
+| `phonemizeBopomofo(text, lang?)` | `text: string`, `lang?: string` | `Promise<string>` | 中文文本 → Bopomofo 注音（v1.1-zh 模式） |
 | `phonemizeDisplay(text, lang?)` | `text: string`, `lang?: string` | `Promise<string>` | 中文文本 → 可读注音 |
-| `tokenize(phonemes, lang?)` | `phonemes: string`, `lang?: string` | `Promise<Uint32Array>` | 音素 → token ID 数组 |
+| `tokenize(phonemes, lang?)` | `phonemes: string`, `lang?: string` | `Promise<Uint32Array>` | 音素 → token ID 数组（MODEL_VOCAB） |
+| `tokenizeV11(phonemes)` | `phonemes: string` | `Promise<Uint32Array>` | 音素 → token ID 数组（ZH_VOCAB，v1.1-zh 模型用） |
 | `loadModel(bytes)` | `bytes: Uint8Array` | `Promise<void>` | 加载 ONNX 模型（oxionnx） |
 | `isModelLoaded()` | — | `boolean` | 模型是否已加载 |
-| `synthesize(text, style, speed)` | `text: string`, `style: Float32Array`, `speed: number` | `Promise<Object>` | 文本 → 语音（oxionnx） |
+| `synthesize(text, style, speed)` | `text: string`, `style: Float32Array`, `speed: number` | `Promise<Object>` | 文本 → 语音（oxionnx，IPA 模式） |
 | `synthesizeWithPhonemes(phonemes, style, speed)` | `phonemes: string`, `style: Float32Array`, `speed: number` | `Promise<Float32Array>` | 音素 → 语音（oxionnx） |
 | `getVoices()` | — | `Promise<VoiceInfo[]>` | 获取内置发音人列表 |
 | `getSampleRate()` | — | `number` | 返回采样率 24000 |
@@ -396,27 +399,27 @@ wasm
 - 专注于流式 SSE 风格的演示
 - 展示持续的语音生成体验
 
-### 3. rust_wasm_demo.html — 纯 Rust WASM (oxionnx)
+### 3. rust_wasm_demo.html — WASM G2P + ONNX Runtime Web
 
 ```
 ┌─────────────────────────────────────┐
-│  Kokoro TTS - 纯 Rust WASM          │
-│  状态: ✅ oxionnx 模型已就绪        │
+│  Kokoro TTS - WASM G2P              │
+│  状态: ✅  模型已就绪                │
 ├─────────────────────────────────────┤
-│  模型: [model_fp16.onnx ▼] (80MB)  │
+│  模型: [v1.1-zh M (int8) ▼]         │
 │  输入文本: 今天天气真不错            │
 │  发音人: [zf_001 ▼]  语速: [1.0]   │
 │  [ 🔊 合成语音 ]  [ ⬇ 下载 WAV ]   │
 ├─────────────────────────────────────┤
 │  进度: ████████████████ 100%        │
-│  推理引擎: oxionnx (纯 Rust)        │
+│  推理引擎: ORT Web (WASM)           │
 └─────────────────────────────────────┘
 ```
 
-- 全部推理在 Rust WASM 内部完成
-- 自带进度条（模型下载进度 + 推理进度）
-- 支持多种模型格式选择（fp16 / int8 / q8f16）
-- 零外部运行时依赖
+- G2P 音素提取：Rust WASM（Bopomofo 模式，使用 `phonemizeBopomofo` + `tokenizeV11`）
+- 模型推理：ONNX Runtime Web（从 CDN 加载 `ort.min.js`）
+- 支持三种 v1.1-zh 模型切换（S int4 / M int8 / L fp32）
+- 发音人数据：`.bin` 风格嵌入文件，通过 `fetch` 加载
 
 ### 运行 Demo 页
 
@@ -455,14 +458,16 @@ cd static && npx serve .
 | 维度 | Native (CLI/Server) | WASM |
 |------|--------------------|------|
 | **运行环境** | Linux/Windows 命令行 | 浏览器（Chromium/Firefox/Safari） |
-| **推理后端** | ONNX Runtime (pyke/ort) | oxionnx 或 ONNX Runtime Web |
+| **推理后端** | ONNX Runtime (pyke/ort) | ONNX Runtime Web |
 | **模型加载** | 文件系统读取 | HTTP fetch + ArrayBuffer |
-| **中文分词** | jieba-rs（CJK 词典） | jieba-rs（CJK 词典，词典嵌入 WASM 二进制） |
+| **中文 G2P** | Bopomofo 模式（jieba 分词 + 多音字消歧 + 变调） | Bopomofo 模式（同上，词典嵌入 WASM） |
+| **词表** | ZH_VOCAB | ZH_VOCAB（tokenizeV11） / MODEL_VOCAB（tokenize） |
 | **JSON 序列化** | serde_json | serde-wasm-bindgen |
 | **多线程** | crossbeam 线程池 + 并行流水线 | 单线程（WASM 无线程） |
-| **音频编码** | WAV / MP3 / Opus | WAV (16-bit PCM) |
+| **音频编码** | WAV (32-bit float) | WAV (32-bit float) |
+| **音频后处理** | 振幅阈值静音裁切 | DC 偏移消除 |
 | **部署** | 需要服务器/终端 | 无服务器，纯前端 |
-| **体积** | 二进制 ~20MB（含 ORT 静态库） | WASM ~3MB |
+| **体积** | 二进制 ~20MB（含 ORT 静态库） | WASM ~1.6MB |
 | **使用场景** | 批量处理、API 服务 | 交互式网页、隐私优先应用 |
 
 ### 性能特征
@@ -506,21 +511,21 @@ WASM Demo 需要以下数据文件（**不在代码仓库中**，需自行下载
 
 ```
 static/
-├── index.html                  # 内置（API 服务器演示）
+├── index.html                  # 内置（API 服务器演示，SSE + WAV 下载）
 ├── wasm_demo.html              # 内置
 ├── browser_demo.html           # 内置
-├── rust_wasm_demo.html         # 内置
+├── rust_wasm_demo.html         # 内置（支持 v1.1-zh S/M/L 三档模型切换）
 ├── wasm-pkg/
 │   └── ...                     # wasm-pack 构建产物
 │
 ├── models/                     # ⚠️ 需手动下载
 │   ├── onnx/
-│   │   ├── model.onnx          # ONNX Runtime Web 用模型
-│   │   ├── model_fp16.onnx     # oxionnx 用 fp16 模型 (~80MB)
-│   │   └── model_int8.onnx     # oxionnx 用 int8 模型 (~122MB)
+│   │   ├── kokoro-v1.1-zh-s.onnx   # int4 量化（47MB）
+│   │   ├── kokoro-v1.1-zh-m.onnx   # int8 量化（79MB）
+│   │   └── kokoro-v1.1-zh-l.onnx   # fp32 全精度（311MB）
 │   └── voices/
 │       ├── voices.json         # 发音人配置
-│       ├── zf_001.bin          # 各发音人风格嵌入
+│       ├── zf_001.bin          # 各发音人风格嵌入（510KB 每个）
 │       ├── zm_001.bin
 │       └── ...                 # 更多 *.bin 文件
 ```

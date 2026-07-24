@@ -1,5 +1,5 @@
 use crate::onn::ort_koko::{self, ModelStrategy};
-use crate::tts::tokenize::tokenize;
+use crate::tts::tokenize::tokenize_zh as tokenize;
 use crate::tts::phonemizer::Phonemizer;
 use ndarray::Array3;
 use ndarray_npy::NpzReader;
@@ -82,8 +82,8 @@ pub struct InitConfig {
 impl Default for InitConfig {
     fn default() -> Self {
         Self {
-            model_url: "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx".into(),
-            voices_url: "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin".into(),
+            model_url: "https://github.com/doiito/kokoroi-rs/releases/download/model-files-v1.1/kokoro-v1.1-zh-m.onnx".into(),
+            voices_url: "https://github.com/doiito/kokoroi-rs/releases/download/model-files-v1.1/voices-v1.0.bin".into(),
             sample_rate: 24000,
         }
     }
@@ -732,7 +732,21 @@ impl TTSKoko {
             ExecutionMode::Batch,
         )?;
 
-        Ok(audio.unwrap().0)
+        let mut audio = audio.unwrap().0;
+
+        // Trim leading/trailing silence with a simple amplitude threshold,
+        // matching what the reference Kokoros-main produces (no fancy DSP).
+        const THRESHOLD: f32 = 0.006;
+        let start = audio.iter().position(|&s| s.abs() > THRESHOLD).unwrap_or(0);
+        if start > 0 && start < audio.len() {
+            audio.drain(0..start);
+        }
+        let end = audio.iter().rposition(|&s| s.abs() > THRESHOLD).unwrap_or(0);
+        if end > 0 && end + 1 < audio.len() {
+            audio.truncate(end + 1);
+        }
+
+        Ok(audio)
     }
 
     /// Streaming version that yields audio chunks as they're generated
@@ -752,7 +766,8 @@ impl TTSKoko {
         F: FnMut(Vec<f32>) -> Result<(), Box<dyn std::error::Error>>,
     {
         let mut adapter = |output: TtsOutput| -> Result<(), Box<dyn std::error::Error>> {
-            chunk_callback(output.raw_output().0)
+            let (audio, _) = output.raw_output();
+            chunk_callback(audio)
         };
 
         self.process_internal(
